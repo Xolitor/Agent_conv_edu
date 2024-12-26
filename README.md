@@ -13,8 +13,43 @@ C:.
 │   └───chat.py          # Modèles pour les requêtes/réponses de chat
 ├───services/            # Services métier
 │   └───llm_service.py   # Service d'interaction avec le LLM
+├───tests/            # Test unitaire sur le code
+│   └───test_mongo_service.py   # test lié à la base de donnée
 ├───utils/               # Utilitaires et helpers
 └───main.py             # Point d'entrée de l'application
+```
+
+
+## Réalisation
+- Un projet fonctionnel avec les endpoints du tp1 du tp2
+- Des endpoints supplémentaires pour gérer les conversations dans la BD MongoDB (effacer des conversations et lister toutes les sessions)
+- Des enpoints supplémentaires (2 endpoints) pour le projet chatbot educatif (seulement des prototypes, le endpoint cours (/ask) ne fonctionne pas)
+- Le projet est lié au backend MongoDB avec une seule collection pour le moment qui est conversation
+- Le projet est lié au front React mais aucun changement n'a été apporté au repo de base
+- Le dossier de tests a été mis en place avec un premier test unitaire
+
+## Lancement du projet et des test 
+
+### le projet backend/FASTAPI
+
+option1: 
+via le debugger python fastapi
+
+option2:
+```bash
+cd app
+uvicorn main:app --reload
+```
+
+### le projet front
+```bash
+npm start
+```
+
+### les tests
+```bash
+cd app
+pytest
 ```
 
 ## Installation et Configuration
