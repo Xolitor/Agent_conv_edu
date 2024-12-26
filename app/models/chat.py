@@ -7,9 +7,9 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel
 
 # ---- Modèles du TP1 ----
-class ChatRequestTP1(BaseModel):
-    """Requête de base pour une conversation sans contexte"""
-    message: str
+# class ChatRequestTP1(BaseModel):
+#     """Requête de base pour une conversation sans contexte"""
+#     message: str
 
 class ChatResponse(BaseModel):
     """Réponse standard du chatbot"""
@@ -19,8 +19,6 @@ class ChatRequestWithContext(BaseModel):
     """Requête avec contexte de conversation du TP1"""
     message: str
     context: Optional[List[Dict[str, str]]] = []
-
-# ---- Nouveaux modèles pour le TP2 ----
 
 class ChatRequestTP2(BaseModel):
     """Requête de base pour une conversation sans contexte"""
@@ -35,3 +33,15 @@ class ChatMessage(BaseModel):
 class ChatHistory(BaseModel):
     """Collection de messages formant une conversation"""
     messages: List[ChatMessage]
+    
+# endpoint du projet
+    
+class ExerciseRequest(BaseModel):
+    """Requête pour un quiz"""
+    course_id: str  
+    answers: Dict[str, str] 
+
+class ChatRequestWithCourseData(BaseModel):
+    """Requête avec données de cours pour le RAG"""
+    message: str  
+    course_id: str  

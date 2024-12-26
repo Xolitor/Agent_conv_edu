@@ -3,6 +3,7 @@
 Service principal gérant les interactions avec le modèle de langage
 Compatible avec les fonctionnalités du TP1 et du TP2
 """
+import uuid
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -87,6 +88,7 @@ class LLMService:
             response_text = response.content
             await self.mongo_service.save_message(session_id, "user", message)
             await self.mongo_service.save_message(session_id, "assistant", response_text)
+            
         else:
             # Mode TP1 avec contexte explicite
             messages = [SystemMessage(content="Vous êtes un assistant utile et concis.")]
@@ -108,21 +110,20 @@ class LLMService:
                 response = await self.llm.agenerate([[SystemMessage(content="Vous êtes un assistant utile et concis."), 
                                                     HumanMessage(content=message)]])
                 response_text = response.generations[0][0].text
-            
-            # messages.append(HumanMessage(content=message))
-            # response = await self.llm.agenerate([messages])
         
         return response_text
-            
-            # await self.mongo_service.save_message(session_id, "user", message)
-            # await self.mongo_service.save_message(session_id, "assistant", response_text)
-            # return response_text
-
-            # return response.generations[0][0].text
             
     async def get_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
         """Récupère l'historique depuis MongoDB"""
         return await self.mongo_service.get_conversation_history(session_id)
+    
+    async def delete_conversation(self, session_id: str) -> bool:
+        """Delete a conversation by session ID."""
+        return await self.mongo_service.delete_conversation(session_id)
+
+    async def get_all_sessions(self) -> List[str]:
+        """Retrieve all session IDs."""
+        return await self.mongo_service.get_all_sessions()
 
 
     # def get_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
@@ -137,6 +138,35 @@ class LLMService:
     #             for msg in history
     #         ]
     #     return []
+    
+    
+    async def generate_exercise_from_context(self, 
+                                            message: str, 
+                                            session_id: Optional[str] = None) -> Dict:
+        """Génerer un exercice à partir d'un contexte de conversation"""
+        try:
+            response = await self.chain_with_history.ainvoke(
+                {"question": message},
+                config={"configurable": {"session_id": session_id}}
+            )
+            
+            response_text = response.content
+            await self.mongo_service.save_message(session_id, "user", message)
+            await self.mongo_service.save_message(session_id, "assistant", response_text)
+            
+            return response_text
+        except Exception as e:
+            raise Exception(f"Error generating exercise: {str(e)}")
+
+    async def get_course_data(self, course_id: str) -> List[Dict[str, str]]:
+        try:
+            course_data = self.mongo_service.find_course({"course_id": course_id})
+            if not course_data:
+                raise Exception(f"Il n'y a pas de cours pour le cours ID: {course_id}")
+
+            return course_data.get("lessons", [])
+        except Exception as e:
+            raise Exception(f"Error retrieving course data: {str(e)}")
     
 
 

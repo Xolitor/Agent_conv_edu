@@ -30,7 +30,11 @@ class MongoService:
         """Récupère l'historique d'une conversation"""
         conversation = await self.conversations.find_one({"session_id": session_id})
         if conversation:
-            return conversation.get("messages", [])
+            messages = conversation.get("messages", [])
+            for message in messages:
+                if "timestamp" in message and isinstance(message["timestamp"], datetime):
+                    message["timestamp"] = message["timestamp"].isoformat()
+            return messages
         return []
     
     async def delete_conversation(self, session_id: str) -> bool:
@@ -43,4 +47,10 @@ class MongoService:
         cursor = self.conversations.find({}, {"session_id": 1})
         sessions = await cursor.to_list(length=None)
         return [session["session_id"] for session in sessions]
+    
+    
+    ## Non fonctionnel A FAIRE
+    async def find_course(self, query: Dict) -> Optional[Dict]:
+        """Trouve un cours dans la base de données"""
+        return await self.db.courses.find_one(query)
 

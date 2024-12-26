@@ -4,21 +4,21 @@ Routes FastAPI pour le chatbot
 Inclut les endpoints du TP1 et du TP2
 """
 from fastapi import APIRouter, HTTPException
-from models.chat import ChatRequestTP1, ChatRequestTP2, ChatRequestWithContext, ChatResponse
+from models.chat import ChatRequestTP2, ChatRequestWithContext, ChatResponse, ExerciseRequest, ChatRequestWithCourseData
 from services.llm_service import LLMService
 from typing import Dict, List
 
 router = APIRouter()
 llm_service = LLMService()
 
-@router.post("/chat/simple", response_model=ChatResponse)
-async def chat_simple(request: ChatRequestTP1) -> ChatResponse:
-    """Endpoint simple du TP1"""
-    try:
-        response = await llm_service.generate_response(request.message)
-        return ChatResponse(response=response)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.post("/chat/simple", response_model=ChatResponse)
+# async def chat_simple(request: ChatRequestTP1) -> ChatResponse:
+#     """Endpoint simple du TP1"""
+#     try:
+#         response = await llm_service.generate_response(request.message)
+#         return ChatResponse(response=response)
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/chat/with-context", response_model=ChatResponse)
 async def chat_with_context(request: ChatRequestWithContext) -> ChatResponse:
@@ -48,20 +48,51 @@ async def chat(request: ChatRequestTP2) -> ChatResponse:
 async def get_history(session_id: str) -> List[Dict[str, str]]:
     """Récupération de l'historique d'une conversation"""
     try:
-        return llm_service.get_conversation_history(session_id)
+        return await llm_service.get_conversation_history(session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-@router.get("/chat/test/{session_id}", response_model=List[Dict[str, str]])
-async def test_chat_history(session_id: str) -> List[Dict[str, str]]:
-    """
-    Endpoint to test retrieving conversation history for a specific session.
-    """
+@router.get("/sessions", response_model=List[str])
+async def get_sessions() -> List[str]:
+    """Retrieve all session IDs."""
     try:
-        # Retrieve the conversation history from MongoDB via LLMService
-        history = await llm_service.get_conversation_history(session_id)
-        
-        # Return the history as a JSON response
-        return history
+        return await llm_service.get_all_sessions()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/history/{session_id}", response_model=bool)
+async def delete_history(session_id: str) -> bool:
+    """Delete a specific conversation."""
+    try:
+        return await llm_service.delete_conversation(session_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    
+# les nouveaux endpoints pour le projet chatbot educatif
+
+@router.post("/ask", response_model=ChatResponse)
+async def chat_with_course_data(request: ChatRequestWithCourseData) -> ChatResponse:
+    """Endpoint pour le RAG avec récupération de données de cours"""
+    try:
+        course_data = await llm_service.get_course_data(request.course_id)
+        response = await llm_service.generate_response(
+            message=request.message,
+            context=course_data
+        )
+        return ChatResponse(response=response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/generate-exercise", response_model=ChatResponse)
+async def generate_exercise_from_context(request: ChatRequestTP2) -> ChatResponse:
+    """Endpoint pour générer un exercice à partir d'un contexte de conversation"""
+    try:
+        exercise_data = await llm_service.generate_exercise_from_context(
+            message=request.message,
+            session_id=request.session_id
+        )
+        return ChatResponse(response=exercise_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
