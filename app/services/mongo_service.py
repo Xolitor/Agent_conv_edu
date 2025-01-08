@@ -13,6 +13,7 @@ class MongoService:
     async def save_message(self, session_id: str, role: str, content: str) -> bool:
         """Sauvegarde un nouveau message dans une conversation"""
         message = Message(role=role, content=content)
+        
         result = await self.conversations.update_one(
             {"session_id": session_id},
             {

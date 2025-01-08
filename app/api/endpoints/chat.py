@@ -3,7 +3,7 @@
 Routes FastAPI pour le chatbot
 Inclut les endpoints du TP1 et du TP2
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from models.chat import ChatRequestTP2, ChatRequestWithContext, ChatResponse, ExerciseRequest, ChatRequestWithCourseData
 from services.llm_service import LLMService
 from typing import Dict, List
@@ -94,5 +94,45 @@ async def generate_exercise_from_context(request: ChatRequestTP2) -> ChatRespons
             session_id=request.session_id
         )
         return ChatResponse(response=exercise_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/documents")
+async def index_documents(
+    texts: List[str] = Body(...),
+    clear_existing: bool = Body(False)
+) -> dict:
+    """
+    Endpoint pour indexer des documents
+    
+    Args:
+        texts: Liste des textes à indexer
+        clear_existing: Si True, supprime l'index existant avant d'indexer
+    """
+    try:
+        await llm_service.rag_service.load_and_index_texts(texts, clear_existing)
+        return {"message": "Documents indexed successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/documents")
+async def clear_documents() -> dict:
+    """Endpoint pour supprimer tous les documents indexés"""
+    try:
+        llm_service.rag_service.clear()
+        return {"message": "Vector store cleared successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/chat/rag", response_model=ChatResponse)
+async def chat_rag(request: ChatRequestTP2) -> ChatResponse:
+    """Endpoint de chat utilisant le RAG"""
+    try:
+        response = await llm_service.generate_response(
+            message=request.message,
+            session_id=request.session_id,
+            use_rag=True
+        )
+        return ChatResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

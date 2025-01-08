@@ -9,3 +9,5 @@ pymongo==4.6.1
 pydantic-settings
 pytest
 pytest-asyncio
+langchain-text-splitters
+langchain-community
