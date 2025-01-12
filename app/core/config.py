@@ -4,6 +4,7 @@ class Settings(BaseSettings):
     mongodb_uri: str
     database_name: str = "chatbot"
     collection_name: str = "conversations"
+    rag_database_name: str = "courses"
     
     model_config = SettingsConfigDict(
         env_file='.env', 
@@ -14,5 +15,5 @@ class Settings(BaseSettings):
 class Config:
     env_file = ".env"
     settings = Settings()
-    
+
 settings = Settings()

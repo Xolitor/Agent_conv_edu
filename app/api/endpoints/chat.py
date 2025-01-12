@@ -119,6 +119,7 @@ async def index_documents(
 async def clear_documents() -> dict:
     """Endpoint pour supprimer tous les documents indexés"""
     try:
+        llm_service.rag_service.close()
         llm_service.rag_service.clear()
         return {"message": "Vector store cleared successfully"}
     except Exception as e:
@@ -128,10 +129,9 @@ async def clear_documents() -> dict:
 async def chat_rag(request: ChatRequestTP2) -> ChatResponse:
     """Endpoint de chat utilisant le RAG"""
     try:
-        response = await llm_service.generate_response(
+        response = await llm_service.generate_response_rag_mongo_v2(
             message=request.message,
             session_id=request.session_id,
-            use_rag=True
         )
         return ChatResponse(response=response)
     except Exception as e:
