@@ -163,6 +163,9 @@ class LLMService:
                 },
                 config={"configurable": {"session_id": session_id}}
             )
+            await self.mongo_service.save_message(session_id, "user", message)
+            await self.mongo_service.save_message(session_id, "assistant", response.content)
+            
             return response.content
         else:
             # Direct response generation without session tracking

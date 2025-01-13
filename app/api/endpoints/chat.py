@@ -129,7 +129,7 @@ async def clear_documents() -> dict:
 async def chat_rag(request: ChatRequestTP2) -> ChatResponse:
     """Endpoint de chat utilisant le RAG"""
     try:
-        response = await llm_service.generate_response_rag_mongo_v2(
+        response = await llm_service.generate_response_rag_mongo(
             message=request.message,
             session_id=request.session_id,
         )
