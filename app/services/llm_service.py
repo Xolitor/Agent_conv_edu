@@ -15,6 +15,7 @@ import os
 from typing import List, Dict, Optional
 from services.mongo_service import MongoService
 from services.rag_mongo_services import RAGServiceMongo
+from services.rag_service import RAGService
 
 class LLMService:
     """
@@ -67,7 +68,7 @@ class LLMService:
         )
 
         # Ajout du service RAG
-        self.rag_service = RAGServiceMongo()
+        self.rag_service = RAGService()
         
         # Mise à jour du prompt pour inclure le contexte RAG
         self.prompt = ChatPromptTemplate.from_messages([
@@ -84,46 +85,22 @@ class LLMService:
             self.conversation_store[session_id] = InMemoryHistory()
         return self.conversation_store[session_id]
 
-    async def generate_response_with_rag(self, 
+    async def generate_response(self, 
                               message: str, 
                               context: Optional[List[Dict[str, str]]] = None,
-                              session_id: Optional[str] = None,
-                              use_rag: bool = False) -> str:
-        """Méthode mise à jour pour supporter le RAG"""
-        rag_context = ""
-        if use_rag and self.rag_service.vector_store:
-            relevant_docs = await self.rag_service.similarity_search(message)
-            rag_context = "\n\n".join(relevant_docs)
-        
+                              session_id: Optional[str] = None) -> str:
         if session_id:
             response = await self.chain_with_history.ainvoke(
                 {
                     "question": message,
-                    "context": rag_context
+                    
                 },
                 config={"configurable": {"session_id": session_id}}
             )
             return response.content
-        else:
-            messages = [
-                SystemMessage(content="Vous êtes un assistant utile et concis.")
-            ]
-            
-            if rag_context:
-                messages.append(SystemMessage(
-                    content=f"Contexte : {rag_context}"
-                ))
-            
-            if context:
-                for msg in context:
-                    if msg["role"] == "user":
-                        messages.append(HumanMessage(content=msg["content"]))
-                    elif msg["role"] == "assistant":
-                        messages.append(AIMessage(content=msg["content"]))
-            
-            messages.append(HumanMessage(content=message))
-            response = await self.llm.agenerate([messages])
-            return response.generations[0][0].text
+        response_text = response.content
+        await self.mongo_service.save_message(session_id, "user", message)
+        await self.mongo_service.save_message(session_id, "assistant", response_text)
         
     async def generate_response_with_rag(
         self, 
@@ -272,45 +249,56 @@ class LLMService:
         except Exception as e:
             raise Exception(f"Error retrieving course data: {str(e)}")
     
-    async def generate_response(self, 
-                              message: str, 
-                              context: Optional[List[Dict[str, str]]] = None,
-                              session_id: Optional[str] = None,
-                              use_rag: bool = False) -> str:
-        """Méthode mise à jour pour supporter le RAG"""
-        rag_context = ""
-        if use_rag and self.rag_service.vector_store:
-            relevant_docs = await self.rag_service.similarity_search(message)
-            rag_context = "\n\n".join(relevant_docs)
+    # async def generate_response(self, 
+    #                           message: str, 
+    #                           context: Optional[List[Dict[str, str]]] = None,
+    #                           session_id: Optional[str] = None,
+    #                           use_rag: bool = False) -> str:
+    #     """Méthode mise à jour pour supporter le RAG"""
+    #     rag_context = ""
+    #     if use_rag and self.rag_service.vector_store:
+    #         relevant_docs = await self.rag_service.similarity_search(message)
+    #         rag_context = "\n\n".join(relevant_docs)
         
-        if session_id:
-            response = await self.chain_with_history.ainvoke(
-                {
-                    "question": message,
-                    "context": rag_context
-                },
-                config={"configurable": {"session_id": session_id}}
-            )
-            return response.content
-        else:
-            messages = [
-                SystemMessage(content="Vous êtes un assistant utile et concis.")
-            ]
+    #     if session_id:
+    #         response = await self.chain_with_history.ainvoke(
+    #             {
+    #                 "question": message,
+    #                 "context": rag_context
+    #             },
+    #             config={"configurable": {"session_id": session_id}}
+    #         )
+    #         return response.content
+    #     else:
+    #         messages = [
+    #             SystemMessage(content="Vous êtes un assistant utile et concis.")
+    #         ]
             
-            if rag_context:
-                messages.append(SystemMessage(
-                    content=f"Contexte : {rag_context}"
-                ))
+    #         if rag_context:
+    #             messages.append(SystemMessage(
+    #                 content=f"Contexte : {rag_context}"
+    #             ))
             
-            if context:
-                for msg in context:
-                    if msg["role"] == "user":
-                        messages.append(HumanMessage(content=msg["content"]))
-                    elif msg["role"] == "assistant":
-                        messages.append(AIMessage(content=msg["content"]))
+    #         if context:
+    #             for msg in context:
+    #                 if msg["role"] == "user":
+    #                     messages.append(HumanMessage(content=msg["content"]))
+    #                 elif msg["role"] == "assistant":
+    #                     messages.append(AIMessage(content=msg["content"]))
             
-            messages.append(HumanMessage(content=message))
-            response = await self.llm.agenerate([messages])
-            return response.generations[0][0].text
+    #         messages.append(HumanMessage(content=message))
+    #         response = await self.llm.agenerate([messages])
+    #         return response.generations[0][0].text
 
+    async def get_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
+        """Récupère l'historique depuis MongoDB"""
+        return await self.mongo_service.get_conversation_history(session_id)
+    
+    async def delete_conversation(self, session_id: str) -> bool:
+        """Delete a conversation by session ID."""
+        return await self.mongo_service.delete_conversation(session_id)
+
+    async def get_all_sessions(self) -> List[str]:
+        """Retrieve all session IDs."""
+        return await self.mongo_service.get_all_sessions()
 
