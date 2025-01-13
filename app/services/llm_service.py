@@ -15,7 +15,6 @@ import os
 from typing import List, Dict, Optional
 from services.mongo_service import MongoService
 from services.rag_mongo_services import RAGServiceMongo
-from services.rag_service import RAGService
 
 class LLMService:
     """
@@ -68,7 +67,7 @@ class LLMService:
         )
 
         # Ajout du service RAG
-        self.rag_service = RAGService()
+        self.rag_service = RAGServiceMongo()
         
         # Mise à jour du prompt pour inclure le contexte RAG
         self.prompt = ChatPromptTemplate.from_messages([
@@ -85,53 +84,18 @@ class LLMService:
             self.conversation_store[session_id] = InMemoryHistory()
         return self.conversation_store[session_id]
 
-    async def generate_response(self, 
+    async def generate_response_with_rag(self, 
                               message: str, 
                               context: Optional[List[Dict[str, str]]] = None,
-                              session_id: Optional[str] = None) -> str:
-        if session_id:
-            response = await self.chain_with_history.ainvoke(
-                {
-                    "question": message,
-                    
-                },
-                config={"configurable": {"session_id": session_id}}
-            )
-            return response.content
-        response_text = response.content
-        await self.mongo_service.save_message(session_id, "user", message)
-        await self.mongo_service.save_message(session_id, "assistant", response_text)
-        
-    async def generate_response_with_rag(
-        self, 
-        message: str, 
-        context: Optional[List[Dict[str, str]]] = None,
-        session_id: Optional[str] = None,
-        use_rag: bool = False
-    ) -> str:
-        """
-        Generate a response, optionally using Retrieval-Augmented Generation (RAG).
-        
-        Args:
-            message: The user message.
-            context: Optional conversation history.
-            session_id: The session ID for tracking history.
-            use_rag: Whether to use RAG for response generation.
-        
-        Returns:
-            The generated response as a string.
-        """
+                              session_id: Optional[str] = None,
+                              use_rag: bool = False) -> str:
+        """Méthode mise à jour pour supporter le RAG"""
         rag_context = ""
-        if use_rag:
-            try:
-                # Use the new RAGServiceMongo for similarity search
-                relevant_docs = await self.rag_service.similarity_search(message)
-                rag_context = "\n\n".join(relevant_docs)
-            except Exception as e:
-                logging.error(f"RAG retrieval failed: {e}")
+        if use_rag and self.rag_service.vector_store:
+            relevant_docs = await self.rag_service.similarity_search(message)
+            rag_context = "\n\n".join(relevant_docs)
         
         if session_id:
-            # Use chain with history for conversational context
             response = await self.chain_with_history.ainvoke(
                 {
                     "question": message,
@@ -141,13 +105,14 @@ class LLMService:
             )
             return response.content
         else:
-            # Direct response generation without session tracking
             messages = [
                 SystemMessage(content="Vous êtes un assistant utile et concis.")
             ]
             
             if rag_context:
-                messages.append(SystemMessage(content=f"Contexte : {rag_context}"))
+                messages.append(SystemMessage(
+                    content=f"Contexte : {rag_context}"
+                ))
             
             if context:
                 for msg in context:
@@ -161,7 +126,7 @@ class LLMService:
             return response.generations[0][0].text
         
             
-    async def generate_response_rag_mongo_v2(
+    async def generate_response_rag_mongo(
         self, 
         message: str, 
         context: Optional[List[Dict[str, str]]] = None,
@@ -219,7 +184,6 @@ class LLMService:
             response = await self.llm.agenerate([messages])
             return response.generations[0][0].text
 
-    
     
     async def generate_exercise_from_context(self, 
                                             message: str, 
@@ -249,47 +213,51 @@ class LLMService:
         except Exception as e:
             raise Exception(f"Error retrieving course data: {str(e)}")
     
-    # async def generate_response(self, 
-    #                           message: str, 
-    #                           context: Optional[List[Dict[str, str]]] = None,
-    #                           session_id: Optional[str] = None,
-    #                           use_rag: bool = False) -> str:
-    #     """Méthode mise à jour pour supporter le RAG"""
-    #     rag_context = ""
-    #     if use_rag and self.rag_service.vector_store:
-    #         relevant_docs = await self.rag_service.similarity_search(message)
-    #         rag_context = "\n\n".join(relevant_docs)
+    async def generate_response(self, 
+                            message: str, 
+                            context: Optional[List[Dict[str, str]]] = None,
+                            session_id: Optional[str] = None) -> str:
+        """
+        Méthode unifiée pour générer des réponses
+        Supporte les deux modes : avec contexte (TP1) et avec historique (TP2)
+        """
+        if session_id:
+            # Mode TP2 avec historique
+            response = await self.chain_with_history.ainvoke(
+                {"question": message},
+                config={"configurable": {"session_id": session_id}}
+            )
+            
+            response_text = response.content
+            await self.mongo_service.save_message(session_id, "user", message)
+            await self.mongo_service.save_message(session_id, "assistant", response_text)
+        else:
+            # Mode TP1 avec contexte explicite
+            messages = [SystemMessage(content="Vous êtes un assistant utile et concis.")]
+            
+            if context:
+                for msg in context:
+                    if msg["role"] == "user":
+                        messages.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        messages.append(AIMessage(content=msg["content"]))
+                        
+                # Ajout du nouveau message
+                messages.append(HumanMessage(content=message))
+                # Génération de la réponse
+                response = await self.llm.agenerate([messages])
+                response_text = response.generations[0][0].text
+            else:
+            # Générer une réponse sans contexte spécifique
+                response = await self.llm.agenerate([[SystemMessage(content="Vous êtes un assistant utile et concis."), 
+                                                    HumanMessage(content=message)]])
+                response_text = response.generations[0][0].text
+            
+            # messages.append(HumanMessage(content=message))
+            # response = await self.llm.agenerate([messages])
         
-    #     if session_id:
-    #         response = await self.chain_with_history.ainvoke(
-    #             {
-    #                 "question": message,
-    #                 "context": rag_context
-    #             },
-    #             config={"configurable": {"session_id": session_id}}
-    #         )
-    #         return response.content
-    #     else:
-    #         messages = [
-    #             SystemMessage(content="Vous êtes un assistant utile et concis.")
-    #         ]
-            
-    #         if rag_context:
-    #             messages.append(SystemMessage(
-    #                 content=f"Contexte : {rag_context}"
-    #             ))
-            
-    #         if context:
-    #             for msg in context:
-    #                 if msg["role"] == "user":
-    #                     messages.append(HumanMessage(content=msg["content"]))
-    #                 elif msg["role"] == "assistant":
-    #                     messages.append(AIMessage(content=msg["content"]))
-            
-    #         messages.append(HumanMessage(content=message))
-    #         response = await self.llm.agenerate([messages])
-    #         return response.generations[0][0].text
-
+        return response_text
+    
     async def get_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
         """Récupère l'historique depuis MongoDB"""
         return await self.mongo_service.get_conversation_history(session_id)
@@ -301,4 +269,3 @@ class LLMService:
     async def get_all_sessions(self) -> List[str]:
         """Retrieve all session IDs."""
         return await self.mongo_service.get_all_sessions()
-
