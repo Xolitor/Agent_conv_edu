@@ -4,7 +4,7 @@ Routes FastAPI pour le chatbot
 Inclut les endpoints du TP1 et du TP2
 """
 from fastapi import APIRouter, HTTPException, Body
-from models.chat import ChatRequestTP2, ChatRequestWithContext, ChatResponse, ExerciseRequest, ChatRequestWithCourseData
+from models.chat import ChatRequest, ChatRequestWithContext, ChatResponse, ExerciseRequest, ChatRequestWithCourseData
 from services.llm_service import LLMService
 from typing import Dict, List
 
@@ -33,7 +33,7 @@ async def chat_with_context(request: ChatRequestWithContext) -> ChatResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequestTP2) -> ChatResponse:
+async def chat(request: ChatRequest) -> ChatResponse:
     """Nouvel endpoint du TP2 avec gestion de session"""
     try:
         response = await llm_service.generate_response(
@@ -68,35 +68,7 @@ async def delete_history(session_id: str) -> bool:
         return await llm_service.delete_conversation(session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-    
-# les nouveaux endpoints pour le projet chatbot educatif
 
-@router.post("/ask", response_model=ChatResponse)
-async def chat_with_course_data(request: ChatRequestWithCourseData) -> ChatResponse:
-    """Endpoint pour le RAG avec récupération de données de cours"""
-    try:
-        course_data = await llm_service.get_course_data(request.course_id)
-        response = await llm_service.generate_response(
-            message=request.message,
-            context=course_data
-        )
-        return ChatResponse(response=response)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/generate-exercise", response_model=ChatResponse)
-async def generate_exercise_from_context(request: ChatRequestTP2) -> ChatResponse:
-    """Endpoint pour générer un exercice à partir d'un contexte de conversation"""
-    try:
-        exercise_data = await llm_service.generate_exercise_from_context(
-            message=request.message,
-            session_id=request.session_id
-        )
-        return ChatResponse(response=exercise_data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
 @router.post("/documents")
 async def index_documents(
     texts: List[str] = Body(...),
@@ -126,13 +98,41 @@ async def clear_documents() -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/chat/rag", response_model=ChatResponse)
-async def chat_rag(request: ChatRequestTP2) -> ChatResponse:
+async def chat_rag(request: ChatRequest) -> ChatResponse:
     """Endpoint de chat utilisant le RAG"""
     try:
-        response = await llm_service.generate_response_rag_mongo_v2(
+        response = await llm_service.generate_response_rag_mongo(
             message=request.message,
             session_id=request.session_id,
         )
         return ChatResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+# les nouveaux endpoints pour le projet chatbot educatif
+
+@router.post("/ask", response_model=ChatResponse)
+async def chat_with_course_data(request: ChatRequestWithCourseData) -> ChatResponse:
+    """Endpoint pour le RAG avec récupération de données de cours"""
+    try:
+        course_data = await llm_service.get_course_data(request.course_id)
+        response = await llm_service.generate_response(
+            message=request.message,
+            context=course_data
+        )
+        return ChatResponse(response=response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/generate-exercise", response_model=ChatResponse)
+async def generate_exercise_from_context(request: ChatRequest) -> ChatResponse:
+    """Endpoint pour générer un exercice à partir d'un contexte de conversation"""
+    try:
+        exercise_data = await llm_service.generate_exercise_from_context(
+            message=request.message,
+            session_id=request.session_id
+        )
+        return ChatResponse(response=exercise_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    

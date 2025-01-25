@@ -83,48 +83,6 @@ class LLMService:
         if session_id not in self.conversation_store:
             self.conversation_store[session_id] = InMemoryHistory()
         return self.conversation_store[session_id]
-
-    async def generate_response_with_rag(self, 
-                              message: str, 
-                              context: Optional[List[Dict[str, str]]] = None,
-                              session_id: Optional[str] = None,
-                              use_rag: bool = False) -> str:
-        """Méthode mise à jour pour supporter le RAG"""
-        rag_context = ""
-        if use_rag and self.rag_service.vector_store:
-            relevant_docs = await self.rag_service.similarity_search(message)
-            rag_context = "\n\n".join(relevant_docs)
-        
-        if session_id:
-            response = await self.chain_with_history.ainvoke(
-                {
-                    "question": message,
-                    "context": rag_context
-                },
-                config={"configurable": {"session_id": session_id}}
-            )
-            return response.content
-        else:
-            messages = [
-                SystemMessage(content="Vous êtes un assistant utile et concis.")
-            ]
-            
-            if rag_context:
-                messages.append(SystemMessage(
-                    content=f"Contexte : {rag_context}"
-                ))
-            
-            if context:
-                for msg in context:
-                    if msg["role"] == "user":
-                        messages.append(HumanMessage(content=msg["content"]))
-                    elif msg["role"] == "assistant":
-                        messages.append(AIMessage(content=msg["content"]))
-            
-            messages.append(HumanMessage(content=message))
-            response = await self.llm.agenerate([messages])
-            return response.generations[0][0].text
-        
             
     async def generate_response_rag_mongo(
         self, 
@@ -222,7 +180,6 @@ class LLMService:
         Supporte les deux modes : avec contexte (TP1) et avec historique (TP2)
         """
         if session_id:
-            # Mode TP2 avec historique
             response = await self.chain_with_history.ainvoke(
                 {"question": message},
                 config={"configurable": {"session_id": session_id}}
@@ -248,13 +205,10 @@ class LLMService:
                 response = await self.llm.agenerate([messages])
                 response_text = response.generations[0][0].text
             else:
-            # Générer une réponse sans contexte spécifique
+                # Générer une réponse sans contexte spécifique
                 response = await self.llm.agenerate([[SystemMessage(content="Vous êtes un assistant utile et concis."), 
                                                     HumanMessage(content=message)]])
                 response_text = response.generations[0][0].text
-            
-            # messages.append(HumanMessage(content=message))
-            # response = await self.llm.agenerate([messages])
         
         return response_text
     

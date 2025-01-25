@@ -6,11 +6,6 @@ Inclut les modèles du TP1 et les nouveaux modèles pour le TP2
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 
-# ---- Modèles du TP1 ----
-# class ChatRequestTP1(BaseModel):
-#     """Requête de base pour une conversation sans contexte"""
-#     message: str
-
 class ChatResponse(BaseModel):
     """Réponse standard du chatbot"""
     response: str
@@ -20,21 +15,26 @@ class ChatRequestWithContext(BaseModel):
     message: str
     context: Optional[List[Dict[str, str]]] = []
 
-class ChatRequestTP2(BaseModel):
+class ChatRequest(BaseModel):
     """Requête de base pour une conversation sans contexte"""
     message: str
-    session_id: str  # Ajouté pour supporter les deux versions
+    session_id: Optional[str] = ""  # Ajouté pour supporter les deux versions
     
 class ChatMessage(BaseModel):
     """Structure d'un message individuel dans l'historique"""
     role: str  # "user" ou "assistant"
     content: str
-
-class ChatHistory(BaseModel):
-    """Collection de messages formant une conversation"""
-    messages: List[ChatMessage]
     
-# endpoint du projet
+# ---- Modèles du TP1 ----
+# class ChatRequestTP1(BaseModel):
+#     """Requête de base pour une conversation sans contexte"""
+#     message: str
+
+# class ChatHistory(BaseModel):
+#     """Collection de messages formant une conversation"""
+#     messages: List[ChatMessage]
+    
+# # endpoint du projet
     
 class ExerciseRequest(BaseModel):
     """Requête pour un quiz"""
