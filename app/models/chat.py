@@ -26,9 +26,9 @@ class ChatMessage(BaseModel):
     content: str
     
 # ---- Modèles du TP1 ----
-# class ChatRequestTP1(BaseModel):
-#     """Requête de base pour une conversation sans contexte"""
-#     message: str
+class ChatRequestTP1(BaseModel):
+    """Requête de base pour une conversation sans contexte"""
+    message: str
 
 # class ChatHistory(BaseModel):
 #     """Collection de messages formant une conversation"""

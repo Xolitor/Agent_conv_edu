@@ -6,10 +6,14 @@ Compatible avec les fonctionnalités du TP1 et du TP2
 import logging
 import uuid
 from langchain_openai import ChatOpenAI
+from langchain_core.language_models.llms import LLM
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.runnables import RunnablePassthrough, RunnableSequence
+from langchain_core.output_parsers import StrOutputParser
+
 from services.memory import InMemoryHistory
 import os
 from typing import List, Dict, Optional
@@ -35,28 +39,40 @@ class LLMService:
         
         # Configuration pour le TP2
         self.conversation_store = {}
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant utile et concis."),
+        
+        self.explanation_chain  = ChatPromptTemplate.from_messages([
+            SystemMessage(content="You are a helpful and concise educational assistant."),
+            MessagesPlaceholder(variable_name="history"),
+            HumanMessage(content="{question}")
+        ]) | self.llm
+
+        self.exercise_chain = ChatPromptTemplate.from_messages([
+            SystemMessage(content="You are a creative educational assistant."),
+            HumanMessage(content="Generate 3 exercises based on this topic: {topic}.")
+        ]) | self.llm
+        
+        self.main_prompt  = ChatPromptTemplate.from_messages([
+            ("system", "Vous êtes un assistant utile et concis en expliquant avec des exemples de jeux vidéos."),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
-        ])
+        ])       
         
         self.bullet_points_chain = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant qui transforme un texte en points clés concis."),
+            ("system", "Vous êtes un assistant qui ajoute des jetons à la fin du texte."),
             ("human", "Résumé sous forme de points clés : {text}")
         ]) | self.llm
 
         self.one_liner_chain = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant qui fournit un résumé d'une ligne."),
+            ("system", "Vous êtes un assistant qui ajoute un résumé en une phrase à la fin du texte."),
             ("human", "Résumé en une phrase : {text}")
         ]) | self.llm
         
-        self.chain = self.prompt | self.llm
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", "Vous êtes un assistant utile et concis."),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
         ])
+        self.chain = self.prompt | self.llm
         
         # Configuration du gestionnaire d'historique
         self.chain_with_history = RunnableWithMessageHistory(
@@ -77,12 +93,63 @@ class LLMService:
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
         ])
-    
-    def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
-        """Récupère ou crée l'historique pour une session donnée"""
-        if session_id not in self.conversation_store:
-            self.conversation_store[session_id] = InMemoryHistory()
-        return self.conversation_store[session_id]
+        
+    async def create_new_conversation(self, user_id: str) -> str:
+        """Crée une nouvelle conversation et génère un ID unique."""
+        session_id = f"session_{uuid.uuid4()}"
+        await self.mongo_service.create_conversation(session_id, user_id)
+        return session_id
+        
+    async def generate_response_sequencing(self, message: str, session_id: str = "") -> str:
+        """
+        Generate a comprehensive response with multiple processing steps
+
+        Args:
+            message (str): User's input message
+            session_id (str, optional): Session identifier for conversation context
+
+        Returns:
+            str: Processed response
+        """
+        # Generate main response using the main prompt
+        main_chain = self.main_prompt | self.llm
+        main_response = (await main_chain.ainvoke({
+            "history":  [],
+            "question": message
+        })).content
+
+        # Generate bullet points from the main response
+        bullet_points_response = (await self.bullet_points_chain.ainvoke({
+            "text": main_response
+        })).content
+
+        # Generate a one-liner summary
+        one_liner_response = (await self.one_liner_chain.ainvoke({
+            "text": bullet_points_response
+        })).content
+
+        # Return the main response with additional processing
+        return one_liner_response
+            
+    def generate_explanation(self, topic: str, reference: str) -> str:
+        """
+        Generates an explanation for the given topic with optional personalization.
+        :param topic: The topic to explain.
+        :param reference: A personalized reference (e.g., video games or pop culture).
+        :return: A string explanation.
+        """
+        question = f"Explain {topic} using examples from {reference}."
+        response = self.explanation_chain({"question": question})
+        return response
+
+    def generate_exercises(self, topic: str) -> str:
+        """
+        Generates exercises based on the given topic.
+        :param topic: The topic for which exercises are generated.
+        :return: A list of exercises as a string.
+        """
+        response = self.exercise_chain.run({"topic": topic})
+        return response
             
     async def generate_response_rag_mongo(
         self, 
@@ -185,7 +252,7 @@ class LLMService:
         if session_id:
             response = await self.chain_with_history.ainvoke(
                 {"question": message},
-                config={"configurable": {"session_id": session_id}}
+                configu={"configurable": {"session_id": session_id}}
             )
             
             response_text = response.content
@@ -193,7 +260,7 @@ class LLMService:
             await self.mongo_service.save_message(session_id, "assistant", response_text)
         else:
             # Mode TP1 avec contexte explicite
-            messages = [SystemMessage(content="Vous êtes un assistant utile et concis.")]
+            messages = [SystemMessage(content="Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes.")]
             
             if context:
                 for msg in context:
@@ -209,8 +276,7 @@ class LLMService:
                 response_text = response.generations[0][0].text
             else:
                 # Générer une réponse sans contexte spécifique
-                response = await self.llm.agenerate([[SystemMessage(content="Vous êtes un assistant utile et concis."), 
-                                                    HumanMessage(content=message)]])
+                response = await self.llm.agenerate(HumanMessage(content=message))
                 response_text = response.generations[0][0].text
         
         return response_text

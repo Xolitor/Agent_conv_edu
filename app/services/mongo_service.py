@@ -44,10 +44,23 @@ class MongoService:
         return result.deleted_count > 0
     
     async def get_all_sessions(self) -> List[str]:
-        """Récupère tous les IDs de session"""
-        cursor = self.conversations.find({}, {"session_id": 1})
+        """Récupère tous les IDs de session triés du plus récent au plus vieux"""
+        cursor = self.conversations.find({}, {"session_id": 1}).sort("updated_at", -1)
         sessions = await cursor.to_list(length=None)
         return [session["session_id"] for session in sessions]
+    
+    async def create_conversation(self, session_id: str, user_id: str) -> bool:
+        """Crée une nouvelle conversation"""
+        conversation = {
+            "session_id": session_id,
+            "user_id": user_id,
+            "messages": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+        
+        result = await self.conversations.insert_one(conversation)
+        return result.inserted_id is not None
     
     
     ## Non fonctionnel A FAIRE

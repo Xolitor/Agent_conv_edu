@@ -4,7 +4,7 @@ Routes FastAPI pour le chatbot
 Inclut les endpoints du TP1 et du TP2
 """
 from fastapi import APIRouter, HTTPException, Body
-from models.chat import ChatRequest, ChatRequestWithContext, ChatResponse, ExerciseRequest, ChatRequestWithCourseData
+from models.chat import ChatRequest, ChatRequestWithContext, ChatResponse, ExerciseRequest, ChatRequestWithCourseData,ChatRequestTP1
 from services.llm_service import LLMService
 from typing import Dict, List
 
@@ -39,6 +39,17 @@ async def chat(request: ChatRequest) -> ChatResponse:
         response = await llm_service.generate_response(
             message=request.message,
             session_id=request.session_id
+        )
+        return ChatResponse(response=response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/summarize", response_model=ChatResponse)
+async def chat(request: ChatRequestTP1) -> ChatResponse:
+    """Nouvel endpoint du TP2 avec gestion de session"""
+    try:
+        response = await llm_service.generate_response_sequencing(
+            message=request.message,
         )
         return ChatResponse(response=response)
     except Exception as e:
