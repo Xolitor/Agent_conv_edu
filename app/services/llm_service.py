@@ -103,6 +103,7 @@ class LLMService:
         """Récupère ou crée l'historique pour une session donnée"""
         if session_id not in self.conversation_store:
             self.conversation_store[session_id] = InMemoryHistory()
+            return self.conversation_store[session_id]
         
     async def create_new_conversation(self, user_id: str) -> str:
         """Crée une nouvelle conversation et génère un ID unique."""
@@ -262,7 +263,7 @@ class LLMService:
         if session_id:
             response = await self.chain_with_history.ainvoke(
                 {"question": message},
-                configu={"configurable": {"session_id": session_id}}
+                config={"configurable": {"session_id": session_id}}
             )
             
             response_text = response.content
