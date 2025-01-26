@@ -4,33 +4,15 @@ Routes FastAPI pour le chatbot
 Inclut les endpoints du TP1 et du TP2
 """
 from fastapi import APIRouter, HTTPException, Body
-from models.chat import ChatRequest, ChatRequestWithContext, ChatResponse, ExerciseRequest, ChatRequestWithCourseData,ChatRequestTP1
+from models.chat import ChatRequest, ChatResponse, ChatRequestWithCourseData, ChatRequestTP1
 from services.llm_service import LLMService
 from typing import Dict, List
 
 router = APIRouter()
 llm_service = LLMService()
 
-# @router.post("/chat/simple", response_model=ChatResponse)
-# async def chat_simple(request: ChatRequestTP1) -> ChatResponse:
-#     """Endpoint simple du TP1"""
-#     try:
-#         response = await llm_service.generate_response(request.message)
-#         return ChatResponse(response=response)
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
+#################### endpoint pour le chatbot de base ####################
 
-@router.post("/chat/with-context", response_model=ChatResponse)
-async def chat_with_context(request: ChatRequestWithContext) -> ChatResponse:
-    """Endpoint avec contexte du TP1"""
-    try:
-        response = await llm_service.generate_response(
-            message=request.message,
-            context=request.context
-        )
-        return ChatResponse(response=response)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
@@ -54,6 +36,35 @@ async def chat(request: ChatRequestTP1) -> ChatResponse:
         return ChatResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/ask", response_model=ChatResponse)
+async def chat_with_course_data(request: ChatRequestWithCourseData) -> ChatResponse:
+    """Endpoint pour le RAG avec récupération de données de cours"""
+    try:
+        course_data = await llm_service.get_course_data(request.course_id)
+        response = await llm_service.generate_response(
+            message=request.message,
+            context=course_data
+        )
+        return ChatResponse(response=response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/generate-exercise", response_model=ChatResponse)
+async def generate_exercise_from_context(request: ChatRequest) -> ChatResponse:
+    """Endpoint pour générer un exercice à partir d'un contexte de conversation"""
+    try:
+        exercise_data = await llm_service.generate_exercise_from_context(
+            message=request.message,
+            session_id=request.session_id
+        )
+        return ChatResponse(response=exercise_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+#################### endpoints pour gestion de l'historique des conversations ####################
 
 @router.get("/history/{session_id}")
 async def get_history(session_id: str) -> List[Dict[str, str]]:
@@ -80,7 +91,11 @@ async def delete_history(session_id: str) -> bool:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/documents")
+
+#################### endpoints pour gestion de la base de données ####################
+
+
+@router.post("index/documents")
 async def index_documents(
     texts: List[str] = Body(...),
     clear_existing: bool = Body(False)
@@ -98,7 +113,7 @@ async def index_documents(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/documents")
+@router.delete("delete/all/documents")
 async def clear_documents() -> dict:
     """Endpoint pour supprimer tous les documents indexés"""
     try:
@@ -108,7 +123,7 @@ async def clear_documents() -> dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/chat/rag", response_model=ChatResponse)
+@router.post("/rag", response_model=ChatResponse)
 async def chat_rag(request: ChatRequest) -> ChatResponse:
     """Endpoint de chat utilisant le RAG"""
     try:
@@ -119,31 +134,3 @@ async def chat_rag(request: ChatRequest) -> ChatResponse:
         return ChatResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-# les nouveaux endpoints pour le projet chatbot educatif
-
-@router.post("/ask", response_model=ChatResponse)
-async def chat_with_course_data(request: ChatRequestWithCourseData) -> ChatResponse:
-    """Endpoint pour le RAG avec récupération de données de cours"""
-    try:
-        course_data = await llm_service.get_course_data(request.course_id)
-        response = await llm_service.generate_response(
-            message=request.message,
-            context=course_data
-        )
-        return ChatResponse(response=response)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/generate-exercise", response_model=ChatResponse)
-async def generate_exercise_from_context(request: ChatRequest) -> ChatResponse:
-    """Endpoint pour générer un exercice à partir d'un contexte de conversation"""
-    try:
-        exercise_data = await llm_service.generate_exercise_from_context(
-            message=request.message,
-            session_id=request.session_id
-        )
-        return ChatResponse(response=exercise_data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    

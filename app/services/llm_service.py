@@ -37,8 +37,9 @@ class LLMService:
             api_key=api_key
         )
         
-        # Configuration pour le TP2
         self.conversation_store = {}
+        
+        #################### Configuration de plusieurs chaînes de traitement ####################
         
         self.explanation_chain  = ChatPromptTemplate.from_messages([
             SystemMessage(content="You are a helpful and concise educational assistant."),
@@ -67,14 +68,16 @@ class LLMService:
             ("human", "Résumé en une phrase : {text}")
         ]) | self.llm
         
+        
+        #################### Chaine qui gère l'historique ####################
+        
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant utile et concis."),
+            ("system", "Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes."),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
-        ])
+        ]) 
         self.chain = self.prompt | self.llm
         
-        # Configuration du gestionnaire d'historique
         self.chain_with_history = RunnableWithMessageHistory(
             self.chain,
             self._get_session_history,
@@ -82,10 +85,11 @@ class LLMService:
             history_messages_key="history"
         )
 
-        # Ajout du service RAG
-        self.rag_service = RAGServiceMongo()
+        #################### Configuration du service RAG ####################
         
-        # Mise à jour du prompt pour inclure le contexte RAG
+        
+        self.rag_service = RAGServiceMongo()
+    
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", "Vous êtes un assistant utile et concis. "
                       "Utilisez le contexte fourni pour répondre aux questions."),
