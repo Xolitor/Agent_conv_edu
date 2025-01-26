@@ -68,8 +68,20 @@ class LLMService:
             ("human", "Résumé en une phrase : {text}")
         ]) | self.llm
         
+
+        #################### Configuration du service RAG ####################
         
-        #################### Chaine qui gère l'historique ####################
+        
+        self.rag_service = RAGServiceMongo()
+    
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", "Vous êtes un assistant utile et concis. "
+                      "Utilisez le contexte fourni pour répondre aux questions."),
+            ("system", "Contexte : {context}"),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}")
+        ])
+                #################### Chaine qui gère l'historique ####################
         
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", "Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes."),
@@ -84,19 +96,6 @@ class LLMService:
             input_messages_key="question",
             history_messages_key="history"
         )
-
-        #################### Configuration du service RAG ####################
-        
-        
-        self.rag_service = RAGServiceMongo()
-    
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant utile et concis. "
-                      "Utilisez le contexte fourni pour répondre aux questions."),
-            ("system", "Contexte : {context}"),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{question}")
-        ])
         
     
     def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
@@ -262,7 +261,7 @@ class LLMService:
         if session_id:
             response = await self.chain_with_history.ainvoke(
                 {"question": message},
-                configu={"configurable": {"session_id": session_id}}
+                config={"configurable": {"session_id": session_id}}
             )
             
             response_text = response.content
