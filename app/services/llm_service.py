@@ -98,6 +98,12 @@ class LLMService:
             ("human", "{question}")
         ])
         
+    
+    def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
+        """Récupère ou crée l'historique pour une session donnée"""
+        if session_id not in self.conversation_store:
+            self.conversation_store[session_id] = InMemoryHistory()
+        
     async def create_new_conversation(self, user_id: str) -> str:
         """Crée une nouvelle conversation et génère un ID unique."""
         session_id = f"session_{uuid.uuid4()}"
