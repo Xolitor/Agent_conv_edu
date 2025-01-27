@@ -125,8 +125,31 @@ async def upload_files(files: List[UploadFile] = File(...)):
         # Clean up uploaded files
         for file_path in saved_files:
             file_path.unlink(missing_ok=True)
+            
+# @router.delete("/delete/document/{doc_id}")
+# async def delete_document(doc_id: str) -> dict:
+#     """
+#     Endpoint to delete a specific document by its ID.
+    
+#     Args:
+#         doc_id: The unique ID of the document to delete.
+#     """
+#     try:
+#         llm_service.rag_service.delete_document(doc_id)
+#         return {"message": f"Document with ID {doc_id} deleted successfully"}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("index/documents")
+# @router.get("/list/document-ids")
+# async def list_document_ids() -> dict:
+#     """Endpoint to list all document IDs."""
+#     try:
+#         ids = llm_service.rag_service.list_document_idsv2()
+#         return {"document_ids": ids}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/index/documents")
 async def index_documents(
     texts: List[str] = Body(...),
     clear_existing: bool = Body(False)
@@ -149,7 +172,7 @@ async def clear_documents() -> dict:
     """Endpoint pour supprimer tous les documents indexés"""
     try:
         llm_service.rag_service.close()
-        llm_service.rag_service.clear()
+        llm_service.rag_service.clearv1()
         return {"message": "Vector store cleared successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
