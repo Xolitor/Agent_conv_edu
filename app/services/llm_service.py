@@ -82,8 +82,7 @@ class LLMService:
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
         ])
-        
-        #################### Chaine qui gère l'historique ####################
+                #################### Chaine qui gère l'historique ####################
         
         # self.prompt = ChatPromptTemplate.from_messages([
         #     ("system", "Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes."),
