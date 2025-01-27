@@ -67,4 +67,11 @@ class MongoService:
     async def find_course(self, query: Dict) -> Optional[Dict]:
         """Trouve un cours dans la base de données"""
         return await self.db.courses.find_one(query)
+    
+    async def create_teacher(self, teacher_data: dict) -> bool:
+        result = await self.db.teachers.insert_one(teacher_data)
+        return result.inserted_id is not None
+    
+    async def get_teacher(self, teacher_id: str) -> Optional[dict] :
+        return await self.db.teachers.find_one({"teacher_id": teacher_id})
 

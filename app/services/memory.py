@@ -21,3 +21,7 @@ class InMemoryHistory(BaseChatMessageHistory):
     def clear(self) -> None:
         """Réinitialise l'historique de la conversation"""
         self.messages = []
+
+    async def aget_messages(self) -> List[BaseMessage]:
+        """Récupère l'historique des messages de façon asynchrone"""
+        return self.messages.copy()

@@ -102,7 +102,7 @@ class LLMService:
         """Récupère ou crée l'historique pour une session donnée"""
         if session_id not in self.conversation_store:
             self.conversation_store[session_id] = InMemoryHistory()
-            return self.conversation_store[session_id]
+        return self.conversation_store[session_id]
         
     async def create_new_conversation(self, user_id: str) -> str:
         """Crée une nouvelle conversation et génère un ID unique."""
@@ -302,3 +302,37 @@ class LLMService:
     async def get_all_sessions(self) -> List[str]:
         """Retrieve all session IDs."""
         return await self.mongo_service.get_all_sessions()
+    
+    async def generate_teacher_response(self, teacher_id: str, user_message: str, session_id: str="") -> str:
+        teacher_data = await self.mongo_service.get_teacher(teacher_id)
+        if not teacher_data:
+            raise ValueError(f"Le professeur {teacher_id} n'existe pas")
+        
+        teacher_style = teacher_data["prompt_instructions"]
+
+        teacher_prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content=teacher_style),
+            MessagesPlaceholder(variable_name="history"),
+            HumanMessage(content="{question}")
+        ]) | self.llm
+
+        if session_id:
+            response = await RunnableWithMessageHistory(
+                teacher_prompt,
+                self._get_session_history,
+                input_messages_key="question",
+                history_messages_key="history"
+            ).ainvoke(
+                {"question": user_message},
+                config={"configurable": {"session_id": session_id}}
+            )
+
+            await self.mongo_service.save_message(session_id, "user", user_message)
+            await self.mongo_service.save_message(session_id, "assistant", response.content)
+            return response.content
+        else:
+            resp = await teacher_prompt.ainvoke({
+                "history": [],
+                "question": user_message
+            })
+            return resp.content
