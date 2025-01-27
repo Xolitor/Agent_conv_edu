@@ -4,6 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.router import router as api_router
 from services.llm_service import LLMService
 import uvicorn
+from services.mongo_service import MongoService
+from models.teacher import initial_teachers
+
 
 load_dotenv()
 
@@ -26,6 +29,12 @@ llm_service = LLMService()
 
 # Inclure les routes
 app.include_router(api_router)
+
+mongo_service = MongoService()
+@app.on_event("startup")
+async def startup_event():
+    # Seed the teachers collection with initial data
+    await mongo_service.seed_teachers(initial_teachers)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

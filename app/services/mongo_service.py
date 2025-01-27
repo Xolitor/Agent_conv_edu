@@ -3,12 +3,32 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from models.conversation import Conversation, Message
 from core.config import settings
+from models.teacher import Teacher
+from pymongo import UpdateOne
+
 
 class MongoService:
     def __init__(self):
         self.client = AsyncIOMotorClient(settings.mongodb_uri)
         self.db = self.client[settings.database_name]
         self.conversations = self.db[settings.collection_name]
+        self.teachers = self.db[settings.teachers_database]
+        
+    async def seed_teachers(self, teachers_data: list[Teacher]):
+        """
+        Populates the teachers collection with initial data if it is empty.
+        """
+        operations = []
+        for teacher in teachers_data:
+            operations.append(
+                UpdateOne(
+                    {"teacher_id": teacher.teacher_id},  
+                    {"$set": teacher.model_dump()},      
+                    upsert=True
+                )
+            )
+        if operations:
+            await self.teachers.bulk_write(operations)
         
     async def save_message(self, session_id: str, role: str, content: str) -> bool:
         """Sauvegarde un nouveau message dans une conversation"""
@@ -69,9 +89,9 @@ class MongoService:
         return await self.db.courses.find_one(query)
     
     async def create_teacher(self, teacher_data: dict) -> bool:
-        result = await self.db.teachers.insert_one(teacher_data)
+        result = await self.teachers.insert_one(teacher_data)
         return result.inserted_id is not None
     
     async def get_teacher(self, teacher_id: str) -> Optional[dict] :
-        return await self.db.teachers.find_one({"teacher_id": teacher_id})
+        return await self.teachers.find_one({"teacher_id": teacher_id})
 

@@ -19,6 +19,7 @@ import os
 from typing import List, Dict, Optional
 from services.mongo_service import MongoService
 from services.rag_mongo_services import RAGServiceMongo
+from services.rag_service import RAGService
 
 class LLMService:
     """
@@ -72,7 +73,7 @@ class LLMService:
         #################### Configuration du service RAG ####################
         
         
-        self.rag_service = RAGServiceMongo()
+        self.rag_service = RAGService()
     
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", "Vous êtes un assistant utile et concis. "
@@ -83,11 +84,11 @@ class LLMService:
         ])
                 #################### Chaine qui gère l'historique ####################
         
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes."),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{question}")
-        ]) 
+        # self.prompt = ChatPromptTemplate.from_messages([
+        #     ("system", "Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes."),
+        #     MessagesPlaceholder(variable_name="history"),
+        #     ("human", "{question}")
+        # ]) 
         self.chain = self.prompt | self.llm
         
         self.chain_with_history = RunnableWithMessageHistory(
@@ -303,7 +304,7 @@ class LLMService:
         """Retrieve all session IDs."""
         return await self.mongo_service.get_all_sessions()
     
-    async def generate_teacher_response(self, teacher_id: str, user_message: str, session_id: str="") -> str:
+    async def generate_teacher_response(self, teacher_id: str, message: str, session_id: str="") -> str:
         teacher_data = await self.mongo_service.get_teacher(teacher_id)
         if not teacher_data:
             raise ValueError(f"Le professeur {teacher_id} n'existe pas")
@@ -317,22 +318,89 @@ class LLMService:
         ]) | self.llm
 
         if session_id:
-            response = await RunnableWithMessageHistory(
-                teacher_prompt,
-                self._get_session_history,
-                input_messages_key="question",
-                history_messages_key="history"
-            ).ainvoke(
-                {"question": user_message},
+            
+            response = await self.chain_with_history.ainvoke(
+                {
+                    "question": message,
+                    "context": teacher_style,
+                },
                 config={"configurable": {"session_id": session_id}}
             )
+            
+            # response = await self.chain_with_history.ainvoke(
+            #     {"question": message},
+            #     config={"configurable": {"session_id": session_id}}
+            # )
+            #history = self._get_session_history(session_id)
+            
+            # if not history:
+            #     # If no history, initialize it with the teacher's style
+            #     history = [SystemMessage(content=teacher_style)]
+            #     await self.mongo_service.save_message(session_id, "system", teacher_style)
+           
+            # response = await RunnableWithMessageHistory(
+            #     teacher_prompt,
+            #     self._get_session_history,
+            #     input_messages_key="question",
+            #     history_messages_key="history"
+            # ).ainvoke(
+            #     {"question": message},
+            #     config={"configurable": {"session_id": session_id}}
+            # )
 
-            await self.mongo_service.save_message(session_id, "user", user_message)
-            await self.mongo_service.save_message(session_id, "assistant", response.content)
+            response_text = response.content
+             
+            await self.mongo_service.save_message(session_id, "user", message)
+            await self.mongo_service.save_message(session_id, "assistant", response_text)
+            return response_text
+        else:
+            # resp = await teacher_prompt.ainvoke({
+            #     "history": [],
+            #     "question": user_message
+            # })
+            response = await self.llm.agenerate(HumanMessage(content=message))
+            response_text = response.generations[0][0].text
+            return response_text
+        
+        
+    async def generate_response_rag_service(self, 
+                              message: str, 
+                              context: Optional[List[Dict[str, str]]] = None,
+                              session_id: Optional[str] = None,
+                              use_rag: bool = False) -> str:
+        """Méthode mise à jour pour supporter le RAG"""
+        rag_context = ""
+        if use_rag and self.rag_service.vector_store:
+            relevant_docs = await self.rag_service.similarity_search(message)
+            rag_context = "\n\n".join(relevant_docs)
+        
+        if session_id:
+            response = await self.chain_with_history.ainvoke(
+                {
+                    "question": message,
+                    "context": rag_context
+                },
+                config={"configurable": {"session_id": session_id}}
+            )
             return response.content
         else:
-            resp = await teacher_prompt.ainvoke({
-                "history": [],
-                "question": user_message
-            })
-            return resp.content
+            messages = [
+                SystemMessage(content="Vous êtes un assistant utile et concis.")
+            ]
+            
+            if rag_context:
+                messages.append(SystemMessage(
+                    content=f"Contexte : {rag_context}"
+                ))
+            
+            if context:
+                for msg in context:
+                    if msg["role"] == "user":
+                        messages.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        messages.append(AIMessage(content=msg["content"]))
+            
+            messages.append(HumanMessage(content=message))
+            response = await self.llm.agenerate([messages])
+            return response.generations[0][0].text
+        

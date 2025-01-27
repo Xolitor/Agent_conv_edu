@@ -7,7 +7,10 @@ from fastapi import APIRouter, HTTPException, Body
 from models.chat import ChatRequest, ChatResponse, ChatRequestWithCourseData, ChatRequestTP1
 from services.llm_service import LLMService
 from typing import Dict, List
-
+from fastapi import FastAPI, UploadFile, File
+from typing import List
+import shutil
+from pathlib import Path
 router = APIRouter()
 llm_service = LLMService()
 
@@ -92,8 +95,36 @@ async def delete_history(session_id: str) -> bool:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#################### endpoints pour gestion de la base de données ####################
+#################### endpoints pour gestion du rag ####################
 
+from fastapi import FastAPI, UploadFile, File
+from typing import List
+import shutil
+from pathlib import Path
+
+# Add these routes to your existing FastAPI app
+@router.post("/upload")
+async def upload_files(files: List[UploadFile] = File(...)):
+    """Upload and process multiple files for RAG"""
+    upload_dir = Path("./uploads")
+    upload_dir.mkdir(exist_ok=True)
+    
+    saved_files = []
+    try:
+        for file in files:
+            file_path = upload_dir / file.filename
+            with file_path.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            saved_files.append(file_path)
+            
+        # Process the files with RAG service
+        await llm_service.rag_service.process_files(saved_files)
+        
+        return {"message": f"Successfully processed {len(saved_files)} files"}
+    finally:
+        # Clean up uploaded files
+        for file_path in saved_files:
+            file_path.unlink(missing_ok=True)
 
 @router.post("index/documents")
 async def index_documents(
@@ -127,9 +158,10 @@ async def clear_documents() -> dict:
 async def chat_rag(request: ChatRequest) -> ChatResponse:
     """Endpoint de chat utilisant le RAG"""
     try:
-        response = await llm_service.generate_response_rag_mongo(
+        response = await llm_service.generate_response_rag_service(
             message=request.message,
             session_id=request.session_id,
+            use_rag=True
         )
         return ChatResponse(response=response)
     except Exception as e:

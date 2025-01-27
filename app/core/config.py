@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     database_name: str = "chatbot"
     collection_name: str = "conversations"
     rag_database_name: str = "courses"
+    teachers_database: str = "teachers"
     
     model_config = SettingsConfigDict(
         env_file='.env', 
