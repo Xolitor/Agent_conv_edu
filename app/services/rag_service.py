@@ -102,6 +102,7 @@ class RAGService:
             try:
                 texts = await self.load_file(file_path)
                 all_texts.extend(texts)
+                print(all_texts)
             except Exception as e:
                 logging.error(f"Error processing file {file_path}: {e}")
                 continue

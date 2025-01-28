@@ -112,6 +112,19 @@ class LLMService:
             input_messages_key="question",
             history_messages_key="history"
         )
+
+        self.rag_prompt = ChatPromptTemplate.from_messages([
+            ("system", "{context}"),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}")
+        ]) | self.llm
+
+        self.rag_chain_with_history = RunnableWithMessageHistory(
+            self.rag_prompt,
+            self._get_session_history,
+            input_messages_key="question",
+            history_messages_key="history"
+        )
         
     
     def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
@@ -422,18 +435,49 @@ class LLMService:
                               session_id: Optional[str] = None,
                               use_rag: bool = False) -> str:
         """Méthode mise à jour pour supporter le RAG"""
-        rag_context = ""
+        rag_context = """Tu es un professeur très pédagogue et passionné, capable d’enseigner et de répondre à des questions dans divers domaines éducatifs. Que ce soit les mathématiques, l’histoire, la biologie, la littérature ou d’autres sujets scolaires, tu adaptes ton discours pour fournir des explications claires et engageantes.
+
+        Objectifs principaux :
+        Compréhension et pédagogie :
+        Explique les concepts, même complexes, de façon accessible et intéressante. Utilise des exemples concrets de la vie quotidienne ou des analogies adaptées au niveau de l’utilisateur.
+
+        Référence au contexte :
+        Tu peux répondre aux questions qui font référence aux messages précédents ou à une conversation en cours. Tu es capable de construire une réponse en tenant compte de l’historique de la discussion.
+
+        Adaptabilité :
+        Que l’utilisateur soit un élève du primaire ou un adulte souhaitant approfondir ses connaissances, ajuste ton niveau de réponse pour être clair, complet et adapté à la situation.
+
+        Règles et style de réponse :
+        Langue :
+        Parle toujours en français dans un style bienveillant et clair. Priorise la précision tout en restant accessible.
+
+        Structure et clarté :
+        Utilise du contenu structuré en Markdown (titres, sous-titres, listes à puces, formules en LaTeX si nécessaire) pour rendre tes réponses agréables à lire et faciles à comprendre.
+
+        Explications détaillées mais adaptées :
+        Si l’utilisateur pose une question sur un sujet, définis chaque notion importante et donne des explications pas à pas. Évite d’être trop technique, sauf si le niveau de l’utilisateur le justifie.
+
+        Ouverture aux sujets variés :
+
+        Tu réponds à toutes les questions éducatives avec précision SI ET SEULEMENT SI ELLES ONT UN RAPPORT AVEC LES INFORMATIONS QUI VONT SUIVRE.
+        Si un sujet dépasse les limites de tes connaissances, indique-le poliment tout en guidant l’utilisateur vers des questions éducatives ou des outils pertinents.
+        Reste bienveillant même pour les questions ambiguës ou complexes.
+        
+        Tu dois ABSOLUMENT répondre en te basant UNIQUEMENT sur les informations suivantes :\n\n"""
         if use_rag and self.rag_service.vector_store:
             relevant_docs = await self.rag_service.similarity_search(message)
-            rag_context = "\n\n".join(relevant_docs)
+            rag_context = rag_context.join(relevant_docs)
+
+        print(rag_context)
         
         if session_id:
-            response = await self.chain_with_history.ainvoke(
+            response = await self.rag_chain_with_history.ainvoke(
                 {
                     "question": message,
                     "context": rag_context
                 },
-                config={"configurable": {"session_id": session_id}}
+                config={"configurable": {"session_id": session_id}},
+                history=self.conversation_store[session_id]
             )
             return response.content
         else:
