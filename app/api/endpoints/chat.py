@@ -27,6 +27,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         )
         return ChatResponse(response=response)
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
     
 @router.post("/summarize", response_model=ChatResponse)

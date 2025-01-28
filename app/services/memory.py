@@ -11,8 +11,8 @@ class InMemoryHistory(BaseChatMessageHistory):
     Implémentation simple du stockage en mémoire de l'historique des conversations.
     Pour un environnement de production, considérer une solution persistante comme Redis.
     """
-    def __init__(self):
-        self.messages: List[BaseMessage] = []
+    def __init__(self, *args) -> None:
+        self.messages: List[BaseMessage] = args if args else []
     
     def add_messages(self, messages: List[BaseMessage]) -> None:
         """Ajoute une série de messages à l'historique"""
