@@ -19,6 +19,7 @@ import os
 from typing import List, Dict, Optional
 from services.mongo_service import MongoService
 from services.rag_mongo_services import RAGServiceMongo
+from datetime import datetime
 
 class LLMService:
     """
@@ -37,8 +38,9 @@ class LLMService:
             api_key=api_key
         )
         
+        print("Initialisation du service LLM")
         self.conversation_store = {}
-        
+
         #################### Configuration de plusieurs chaînes de traitement ####################
         
         self.explanation_chain  = ChatPromptTemplate.from_messages([
@@ -96,17 +98,39 @@ class LLMService:
             input_messages_key="question",
             history_messages_key="history"
         )
+
+        self.teacher_prompt = ChatPromptTemplate.from_messages([
+            ("system", "{teacher_style}"),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}")
+        ]) | self.llm
+
+        self.teacher_chain_with_history = RunnableWithMessageHistory(
+            self.teacher_prompt,
+            self._get_session_history,
+            input_messages_key="question",
+            history_messages_key="history"
+        )
         
     
     def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
         """Récupère ou crée l'historique pour une session donnée"""
         if session_id not in self.conversation_store:
+            print(f"Création de l'historique pour la session {session_id}")
             self.conversation_store[session_id] = InMemoryHistory()
         return self.conversation_store[session_id]
+    
+    def cleanup_inactive_sessions(self):
+        """Nettoie les sessions inactives"""
+        current_time = datetime.now()
+        for session_id, history in list(self.conversation_store.items()):
+            if not history.is_active():
+                del self.conversation_store[session_id]
         
     async def create_new_conversation(self, user_id: str) -> str:
         """Crée une nouvelle conversation et génère un ID unique."""
         session_id = f"session_{uuid.uuid4()}"
+        
         await self.mongo_service.create_conversation(session_id, user_id)
         return session_id
         
@@ -259,10 +283,12 @@ class LLMService:
         Méthode unifiée pour générer des réponses
         Supporte les deux modes : avec contexte (TP1) et avec historique (TP2)
         """
+
         if session_id:
             response = await self.chain_with_history.ainvoke(
                 {"question": message},
-                config={"configurable": {"session_id": session_id}}
+                config={"configurable": {"session_id": session_id}},
+                history=self.conversation_store[session_id]
             )
             
             response_text = response.content
@@ -292,8 +318,14 @@ class LLMService:
         return response_text
     
     async def get_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
-        """Récupère l'historique depuis MongoDB"""
-        return await self.mongo_service.get_conversation_history(session_id)
+        """Récupère l'historique depuis MongoDB et initialise la mémoire"""
+        # Attendre les données de MongoDB
+        history = await self.mongo_service.get_conversation_history(session_id)
+        # Initialiser EnhancedMemoryHistory avec les données récupérées
+        self.conversation_store[session_id] = InMemoryHistory()
+        self.conversation_store[session_id].add_messages(history)
+
+        return history
     
     async def delete_conversation(self, session_id: str) -> bool:
         """Delete a conversation by session ID."""
@@ -303,36 +335,40 @@ class LLMService:
         """Retrieve all session IDs."""
         return await self.mongo_service.get_all_sessions()
     
-    async def generate_teacher_response(self, teacher_id: str, user_message: str, session_id: str="") -> str:
+    async def generate_teacher_response(self, teacher_id: str, message: str, session_id: str) -> str:
         teacher_data = await self.mongo_service.get_teacher(teacher_id)
         if not teacher_data:
             raise ValueError(f"Le professeur {teacher_id} n'existe pas")
         
         teacher_style = teacher_data["prompt_instructions"]
 
-        teacher_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=teacher_style),
-            MessagesPlaceholder(variable_name="history"),
-            HumanMessage(content="{question}")
-        ]) | self.llm
+        if not teacher_style or not isinstance(teacher_style, str):
+            raise ValueError(f"Prompt instructions invalides pour le professeur {teacher_id}")
+
+        # self.chain = ChatPromptTemplate.from_messages([
+        #     ("system",teacher_style),
+        #     MessagesPlaceholder(variable_name="history"),
+        #     ("human","{question}")
+        # ])
+
 
         if session_id:
-            response = await RunnableWithMessageHistory(
-                teacher_prompt,
-                self._get_session_history,
-                input_messages_key="question",
-                history_messages_key="history"
-            ).ainvoke(
-                {"question": user_message},
-                config={"configurable": {"session_id": session_id}}
+            response = await self.teacher_chain_with_history.ainvoke(
+                {
+                    "teacher_style": teacher_style,
+                    "question": message
+                },
+                config={"configurable": {"session_id": session_id}},
+                history=self.conversation_store[session_id]
             )
-
-            await self.mongo_service.save_message(session_id, "user", user_message)
-            await self.mongo_service.save_message(session_id, "assistant", response.content)
-            return response.content
+            print(response)
+            response_text = response.content
+            await self.mongo_service.save_message(session_id, "user", message)
+            await self.mongo_service.save_message(session_id, "assistant", response_text)
         else:
-            resp = await teacher_prompt.ainvoke({
+            response = await self.chain.ainvoke({
                 "history": [],
-                "question": user_message
+                "question": message
             })
-            return resp.content
+            response_text = response.content
+        return response_text
