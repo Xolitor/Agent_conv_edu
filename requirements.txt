@@ -12,3 +12,4 @@ pytest-asyncio
 langchain-text-splitters
 langchain-community
 chromadb
+pypdf
