@@ -29,10 +29,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 @router.post("/summarize", response_model=ChatResponse)
 async def chat(request: ChatRequestTP1) -> ChatResponse:
-    """Nouvel endpoint du TP2 avec gestion de session"""
+    """Nouvel endpoint permettant de tester le Sequencing Chain"""
     try:
         response = await llm_service.generate_response_sequencing(
             message=request.message,
@@ -40,32 +40,6 @@ async def chat(request: ChatRequestTP1) -> ChatResponse:
         return ChatResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/ask", response_model=ChatResponse)
-async def chat_with_course_data(request: ChatRequestWithCourseData) -> ChatResponse:
-    """Endpoint pour le RAG avec récupération de données de cours"""
-    try:
-        course_data = await llm_service.get_course_data(request.course_id)
-        response = await llm_service.generate_response(
-            message=request.message,
-            context=course_data
-        )
-        return ChatResponse(response=response)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/generate-exercise", response_model=ChatResponse)
-async def generate_exercise_from_context(request: ChatRequest) -> ChatResponse:
-    """Endpoint pour générer un exercice à partir d'un contexte de conversation"""
-    try:
-        exercise_data = await llm_service.generate_exercise_from_context(
-            message=request.message,
-            session_id=request.session_id
-        )
-        return ChatResponse(response=exercise_data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 
 #################### endpoints pour gestion de l'historique des conversations ####################
@@ -96,14 +70,13 @@ async def delete_history(session_id: str) -> bool:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#################### endpoints pour gestion du rag ####################
+#################### endpoints pour gestion du rag, discussiona avec rag ####################
 
 from fastapi import FastAPI, UploadFile, File
 from typing import List
 import shutil
 from pathlib import Path
 
-# Add these routes to your existing FastAPI app
 @router.post("/upload")
 async def upload_files(files: List[UploadFile] = File(...)):
     """Upload and process multiple files for RAG"""
@@ -127,7 +100,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
         for file_path in saved_files:
             file_path.unlink(missing_ok=True)
 
-@router.post("index/documents")
+@router.post("/index/documents")
 async def index_documents(
     texts: List[str] = Body(...),
     clear_existing: bool = Body(False)
@@ -145,7 +118,7 @@ async def index_documents(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("delete/all/documents")
+@router.delete("/delete/all/documents")
 async def clear_documents() -> dict:
     """Endpoint pour supprimer tous les documents indexés"""
     try:
