@@ -440,6 +440,7 @@ class LLMService:
         Objectifs principaux :
         Compréhension et pédagogie :
         Explique les concepts, même complexes, de façon accessible et intéressante. Utilise des exemples concrets de la vie quotidienne ou des analogies adaptées au niveau de l’utilisateur.
+        De plus quand l'utilisateur fais référence aux documents qu'il t'as transmis, il parle parles des informations qui viendrons après.
 
         Référence au contexte :
         Tu peux répondre aux questions qui font référence aux messages précédents ou à une conversation en cours. Tu es capable de construire une réponse en tenant compte de l’historique de la discussion.
@@ -463,7 +464,7 @@ class LLMService:
         Si un sujet dépasse les limites de tes connaissances, indique-le poliment tout en guidant l’utilisateur vers des questions éducatives ou des outils pertinents.
         Reste bienveillant même pour les questions ambiguës ou complexes.
         
-        Tu dois ABSOLUMENT répondre en te basant UNIQUEMENT sur les informations suivantes :\n\n"""
+        Tu dois ABSOLUMENT répondre en te basant UNIQUEMENT sur les informations suivantes (référencé comme des informations ou des documents que l'utilisateur t'aurais donnée) :\n\n"""
         if use_rag and self.rag_service.vector_store:
             relevant_docs = await self.rag_service.similarity_search(message)
             rag_context = rag_context.join(relevant_docs)
@@ -479,7 +480,12 @@ class LLMService:
                 config={"configurable": {"session_id": session_id}},
                 history=self.conversation_store[session_id]
             )
-            return response.content
+            response_text = response.content
+        
+            await self.mongo_service.save_message(session_id, "user", message)
+            await self.mongo_service.save_message(session_id, "assistant", response_text)
+
+            return response_text
         else:
             messages = [
                 SystemMessage(content="Vous êtes un assistant utile et concis.")
