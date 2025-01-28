@@ -77,20 +77,20 @@ class LLMService:
         
         self.rag_service = RAGService()
     
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant utile et concis. "
-                      "Utilisez le contexte fourni pour répondre aux questions."),
-            ("system", "Contexte : {context}"),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{question}")
-        ])
-                #################### Chaine qui gère l'historique ####################
-        
-        # self.prompt = ChatPromptTemplate.from_messages([
-        #     ("system", "Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes."),
+        # self.rag_prompt = ChatPromptTemplate.from_messages([
+        #     ("system", "Vous êtes un assistant utile et concis. "
+        #               "Utilisez le contexte fourni pour répondre aux questions."),
+        #     ("system", "Contexte : {context}"),
         #     MessagesPlaceholder(variable_name="history"),
         #     ("human", "{question}")
-        # ]) 
+        # ])
+                #################### Chaine qui gère l'historique ####################
+        
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", "Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes."),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}")
+        ]) 
         self.chain = self.prompt | self.llm
         
         self.chain_with_history = RunnableWithMessageHistory(
@@ -275,6 +275,48 @@ class LLMService:
             return course_data.get("lessons", [])
         except Exception as e:
             raise Exception(f"Error retrieving course data: {str(e)}")
+    
+    async def generate_response(self, 
+                            message: str, 
+                            context: Optional[List[Dict[str, str]]] = None,
+                            session_id: Optional[str] = None) -> str:
+        """
+        Méthode unifiée pour générer des réponses
+        Supporte les deux modes : avec contexte (TP1) et avec historique (TP2)
+        """
+
+        if session_id:
+            response = await self.chain_with_history.ainvoke(
+                {"question": message},
+                config={"configurable": {"session_id": session_id}},
+                history=self.conversation_store[session_id]
+            )
+            
+            response_text = response.content
+            await self.mongo_service.save_message(session_id, "user", message)
+            await self.mongo_service.save_message(session_id, "assistant", response_text)
+        else:
+            # Mode TP1 avec contexte explicite
+            messages = [SystemMessage(content="Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes.")]
+            
+            if context:
+                for msg in context:
+                    if msg["role"] == "user":
+                        messages.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        messages.append(AIMessage(content=msg["content"]))
+                        
+                # Ajout du nouveau message
+                messages.append(HumanMessage(content=message))
+                # Génération de la réponse
+                response = await self.llm.agenerate([messages])
+                response_text = response.generations[0][0].text
+            else:
+                # Générer une réponse sans contexte spécifique
+                response = await self.llm.agenerate(HumanMessage(content=message))
+                response_text = response.generations[0][0].text
+        
+        return response_text
     
     async def generate_response(self, 
                             message: str, 
