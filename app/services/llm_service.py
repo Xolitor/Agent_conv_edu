@@ -19,6 +19,7 @@ import os
 from typing import List, Dict, Optional
 from services.mongo_service import MongoService
 from datetime import datetime
+from services.rag_mongo_services import RAGServiceMongo
 from services.rag_service import RAGService
 
 class LLMService:
