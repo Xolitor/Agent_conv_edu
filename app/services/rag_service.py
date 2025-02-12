@@ -102,6 +102,7 @@ class RAGService:
             try:
                 texts = await self.load_file(file_path)
                 all_texts.extend(texts)
+                print(all_texts)
             except Exception as e:
                 logging.error(f"Error processing file {file_path}: {e}")
                 continue
@@ -138,45 +139,6 @@ class RAGService:
             
         # Persistance explicite
         self.vector_store.persist()
-
-
-    async def load_and_index_textsv2(self, texts: List[str], clear_existing: bool = False) -> None:
-        """
-        Charge et indexe une liste de textes
-        
-        Args:
-            texts: Liste de textes à indexer
-            clear_existing: Si True, supprime l'index existant avant d'indexer
-        """
-        # Nettoyage optionnel de l'existant
-        with self.lock:
-            if clear_existing and os.path.exists(self.persist_dir):
-                self.clear()
-            # if self.vector_store:
-            #     self.vector_store._client = None  # Release the SQLite client
-            #     self.vector_store = None
-            # shutil.rmtree(self.persist_dir)
-            # os.makedirs(self.persist_dir)
-            
-            # self.vector_store._client = None
-            # self.vector_store = None
-            
-        # Découpage des textes
-            splits = self.text_splitter.split_text("\n\n".join(texts))
-            
-            if self.vector_store is None:
-                # Création initiale
-                self.vector_store = Chroma.from_texts(
-                    splits,
-                    self.embeddings,
-                    persist_directory=self.persist_dir
-                )
-            else:
-                # Ajout à l'existant
-                self.vector_store.add_texts(splits)
-                
-            # Persistance explicite
-            self.vector_store.persist()
     
     async def similarity_search(self, query: str, k: int = 4) -> List[str]:
         """

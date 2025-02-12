@@ -8,15 +8,32 @@ from fastapi import Depends
 router = APIRouter()
 llm_service = LLMService()
 
-@router.post("/{teacher_id}/chat", response_model=ChatResponse)
-async def chat_with_teacher(teacher_id: str, request: ChatRequest, mongo_service: MongoService = Depends()):
-    teacher = await mongo_service.teachers.find_one({"teacher_id": teacher_id})
-    if not teacher:
-        raise HTTPException(status_code=404, detail=f"Teacher with ID {teacher_id} not found.")
+@router.get("/history/{session_id}")
+async def get_history(session_id: str) -> List[Dict[str, str]]:
+    """Récupération de l'historique d'une conversation"""
+    try:
+        return await llm_service.get_conversation_history(session_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     
-    response = await llm_service.generate_teacher_response(
-        teacher_id = teacher_id,
-        message=request.message,
-        session_id=request.session_id
-    )
-    return ChatResponse(response=response)
+@router.get("/sessions", response_model=List[str])
+async def get_sessions() -> List[str]:
+    """Retrieve all session IDs."""
+    try:
+        return await llm_service.get_all_sessions()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{teacher_id}/chat", response_model=ChatResponse)
+async def chat_with_teacher(teacher_id: str, request: ChatRequest):
+        try :
+            response = await llm_service.generate_teacher_response(
+            teacher_id = teacher_id,
+            message=request.message,
+            session_id=request.session_id
+            )
+            return ChatResponse(response=response)
+        except Exception as e:
+                print(e)
+                raise HTTPException(status_code=500, detail=str(e))
+        
