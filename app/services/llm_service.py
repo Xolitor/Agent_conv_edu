@@ -82,13 +82,15 @@ class LLMService:
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
         ])
-                #################### Chaine qui gère l'historique ####################
+        
+        #################### Chaine qui gère l'historique ####################
         
         # self.prompt = ChatPromptTemplate.from_messages([
         #     ("system", "Vous êtes un assistant utile et concis qui retourne ses réponses en format Markdown. Répondez toujours avec un formatage clair, en utilisant des titres, des listes."),
         #     MessagesPlaceholder(variable_name="history"),
         #     ("human", "{question}")
         # ]) 
+        
         self.chain = self.prompt | self.llm
         
         self.chain_with_history = RunnableWithMessageHistory(
@@ -97,8 +99,7 @@ class LLMService:
             input_messages_key="question",
             history_messages_key="history"
         )
-        
-    
+           
     def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
         """Récupère ou crée l'historique pour une session donnée"""
         if session_id not in self.conversation_store:

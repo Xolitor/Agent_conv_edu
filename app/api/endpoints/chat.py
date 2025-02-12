@@ -3,6 +3,7 @@
 Routes FastAPI pour le chatbot
 Inclut les endpoints du TP1 et du TP2
 """
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Body
 from models.chat import ChatRequest, ChatResponse, ChatRequestWithCourseData, ChatRequestTP1
 from services.llm_service import LLMService
@@ -12,6 +13,10 @@ from typing import List
 import shutil
 from pathlib import Path
 router = APIRouter()
+import hashlib
+from datetime import datetime
+from asyncio.log import logger
+# import datetime
 llm_service = LLMService()
 
 #################### endpoint pour le chatbot de base ####################
@@ -125,7 +130,79 @@ async def upload_files(files: List[UploadFile] = File(...)):
         # Clean up uploaded files
         for file_path in saved_files:
             file_path.unlink(missing_ok=True)
+            
+@router.post("/uploadv2")
+async def upload_filesv2(files: List[UploadFile] = File(...)):
+    """
+    Upload and process files endpoint
+    """
+    processed_files = []
+    
+    for file in files:
+        try:
+            # Process file content
+            chunks = await llm_service.rag_mongo_services.process_file(file)
+            
+            # Create metadata
+            metadata = {
+                "filename": file.filename,
+                "file_id": hashlib.md5(file.filename.encode()).hexdigest(),
+                "upload_timestamp": datetime.now().isoformat()
+            }
+            
+            # Add to vector store
+            await llm_service.rag_mongo_services.add_texts_to_vectorstore(chunks, metadata)
+            
+            processed_files.append({
+                "filename": file.filename,
+                "status": "success",
+                "chunks": len(chunks)
+            })
+            
+        except Exception as e:
+            processed_files.append({
+                "filename": file.filename,
+                "status": "error",
+                "error": str(e)
+            })
+    
+    return {"processed_files": processed_files}
 
+@router.post("/queryv2")
+async def query_documents(query: str):
+    """Query endpoint with enhanced error handling and debugging"""
+    try:
+        
+        # Get collection stats before search
+        doc_count = await llm_service.rag_mongo_services.get_document_count()
+        has_index = await llm_service.rag_mongo_services.verify_index()
+        
+        logger.debug(f"Collection status - Documents: {doc_count}, Has Index: {has_index}")
+        
+        results = await llm_service.rag_mongo_services.similarity_search(query)
+        
+        return {
+            "results": results,
+            "metadata": {
+                "total_documents": doc_count,
+                "has_index": has_index,
+                "query": query
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Query endpoint error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/debug")
+async def debug_collection():
+    sample_doc = await llm_service.rag_mongo_services.collection.find_one()
+    doc_count = await llm_service.rag_mongo_services.get_document_count()
+    return {
+        "sample_document": sample_doc,
+        "document_count": doc_count
+    }
+    
 @router.post("index/documents")
 async def index_documents(
     texts: List[str] = Body(...),

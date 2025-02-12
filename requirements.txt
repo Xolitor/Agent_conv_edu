@@ -13,3 +13,5 @@ langchain-text-splitters
 langchain-community
 chromadb
 pypdf
+PyPDF2
+bs4
