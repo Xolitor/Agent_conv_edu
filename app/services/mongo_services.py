@@ -1,4 +1,3 @@
-
 import os
 import asyncio
 from asyncio.log import logger
@@ -271,3 +270,35 @@ class MongoDBService:
         except Exception as e:
             logger.error(f"Failed to add texts: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to add texts to vector store: {str(e)}")
+    
+    async def save_exercise(self, 
+                            subject: str,
+                            topic: str,
+                            exercise_data: dict,
+                            teacher_id: Optional[str] = None) -> str:
+        """Save an exercise to the database"""
+        exercise = {
+            "subject": subject,
+            "topic": topic,
+            "exercise_data": exercise_data,
+            "teacher_id": teacher_id,
+            "created_at": datetime.utcnow()
+        }
+        
+        result = await self.db.exercises.insert_one(exercise)
+        return str(result.inserted_id)
+
+    async def get_exercise(self, exercise_id: str) -> Optional[Dict]:
+        """Retrieve an exercise by ID"""
+        from bson import ObjectId
+        try:
+            result = await self.db.exercises.find_one({"_id": ObjectId(exercise_id)})
+            return result
+        except Exception as e:
+            logger.error(f"Failed to retrieve exercise: {str(e)}")
+            return None
+
+    async def get_exercises_by_subject(self, subject: str, limit: int = 10) -> List[Dict]:
+        """Get exercises for a specific subject"""
+        cursor = self.db.exercises.find({"subject": subject}).sort("created_at", -1).limit(limit)
+        return await cursor.to_list(length=limit)

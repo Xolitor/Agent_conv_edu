@@ -1,28 +1,21 @@
 # api/chat.py
 """
 Routes FastAPI pour le chatbot
-Inclut les endpoints du TP1 et du TP2
 """
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, UploadFile, File
 from models.chat import ChatRequest, ChatResponse
 from services.llm_claude import LLMService
 from typing import Dict, List, Optional
-from fastapi import FastAPI, UploadFile, File
-from typing import List
-import shutil
 from pathlib import Path
 router = APIRouter()
 import hashlib
-from datetime import datetime
 from asyncio.log import logger
 from bson.json_util import dumps, loads
-from fastapi.responses import JSONResponse
-# import datetime
+
 llm_service = LLMService()
 
 #################### endpoint pour le chatbot de base ####################
-
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
@@ -78,35 +71,7 @@ async def delete_history(session_id: str) -> bool:
 
 
 #################### endpoints pour gestion du rag, discussiona avec rag ####################
-
-from fastapi import FastAPI, UploadFile, File
-from typing import List
-import shutil
-from pathlib import Path
-
-@router.post("/upload")
-async def upload_files(files: List[UploadFile] = File(...)):
-    """Upload and process multiple files for RAG"""
-    upload_dir = Path("./uploads")
-    upload_dir.mkdir(exist_ok=True)
-    
-    saved_files = []
-    try:
-        for file in files:
-            file_path = upload_dir / file.filename
-            with file_path.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            saved_files.append(file_path)
-            
-        # Process the files with RAG service
-        await llm_service.rag_service.process_files(saved_files)
-        
-        return {"message": f"Successfully processed {len(saved_files)} files"}
-    finally:
-        # Clean up uploaded files
-        for file_path in saved_files:
-            file_path.unlink(missing_ok=True)
-            
+       
 @router.post("/uploadv2")
 async def upload_filesv2(files: List[UploadFile] = File(...)):
     """
@@ -142,42 +107,7 @@ async def upload_filesv2(files: List[UploadFile] = File(...)):
                 "error": str(e)
             })
     
-    return {"processed_files": processed_files}
-
-@router.post("/queryv2")
-async def query_documents(query: str):
-    """Query endpoint with enhanced error handling and debugging"""
-    try:
-        
-        # Get collection stats before search
-        doc_count = await llm_service.mongo_services.get_document_count()
-        has_index = await llm_service.mongo_services.verify_index()
-        
-        logger.debug(f"Collection status - Documents: {doc_count}, Has Index: {has_index}")
-        
-        results = await llm_service.mongo_services.similarity_search(query)
-        
-        if not results:
-            return {
-                "answer": "I couldn't find any relevant information to answer your question.",
-                "chunks": []
-            }
-            
-        return {
-            "results": results,
-            "metadata": {
-                "total_documents": doc_count,
-                "has_index": has_index,
-                "query": query
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Query endpoint error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-    
-from bson import json_util
-from bson.objectid import ObjectId
+    return {"processed_files": processed_files}   
 
 @router.get("/debug")
 async def debug_collection():

@@ -1,0 +1,281 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Educational Exercises</title>
+    <link rel="stylesheet" href="css/main.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>Generate Exercises</h2>
+            <form id="exerciseForm">
+                <div class="form-group">
+                    <label for="subject">Subject:</label>
+                    <input type="text" id="subject" required placeholder="e.g., Mathematics">
+                </div>
+                <div class="form-group">
+                    <label for="topic">Topic:</label>
+                    <input type="text" id="topic" required placeholder="e.g., Integral Calculus">
+                </div>
+                <div class="form-group">
+                    <label for="exerciseType">Exercise Type:</label>
+                    <select id="exerciseType">
+                        <option value="multiple_choice">Multiple Choice</option>
+                        <option value="fill_in_blank">Fill in the Blank</option>
+                        <option value="short_answer">Short Answer</option>
+                        <option value="essay">Essay</option>
+                        <option value="code">Code</option>
+                        <option value="math">Math</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="difficulty">Difficulty:</label>
+                    <select id="difficulty">
+                        <option value="easy">Easy</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="hard">Hard</option>
+                        <option value="expert">Expert</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="numQuestions">Number of Questions:</label>
+                    <input type="number" id="numQuestions" min="1" max="10" value="3">
+                </div>
+                <div class="form-group">
+                    <label for="teacherId">Teacher (Optional):</label>
+                    <select id="teacherId">
+                        <option value="">No specific teacher</option>
+                        <option value="math_teacher">Math Teacher</option>
+                        <option value="science_teacher">Science Teacher</option>
+                        <!-- Add more teachers as they become available -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="includeSolutions">
+                        Include Solutions
+                    </label>
+                </div>
+                <button type="submit">Generate Exercise</button>
+            </form>
+        </div>
+
+        <div class="content">
+            <div id="exerciseContainer">
+                <h2>Exercise</h2>
+                <div id="exerciseContent"></div>
+            </div>
+            
+            <div id="solutionContainer" style="display: none;">
+                <h2>Solutions</h2>
+                <div id="solutionContent"></div>
+            </div>
+            
+            <div id="answerForm" style="display: none;">
+                <h3>Submit Your Answer</h3>
+                <textarea id="studentAnswer" rows="5" placeholder="Type your answer here..."></textarea>
+                <button id="submitAnswer">Submit Answer</button>
+            </div>
+            
+            <div id="evaluationContainer" style="display: none;">
+                <h3>Evaluation</h3>
+                <div id="evaluationContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Exercise generation logic
+        document.getElementById('exerciseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const requestData = {
+                subject: document.getElementById('subject').value,
+                topic: document.getElementById('topic').value,
+                exercise_type: document.getElementById('exerciseType').value,
+                include_solutions: document.getElementById('includeSolutions').checked,
+                teacher_id: document.getElementById('teacherId').value || null,
+                session_id: localStorage.getItem('sessionId') || null
+            };
+            
+            const params = new URLSearchParams({
+                difficulty: document.getElementById('difficulty').value,
+                number_of_questions: document.getElementById('numQuestions').value
+            });
+            
+            try {
+                const response = await fetch(`/api/exercises/generate-exercise?${params}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                displayExercise(data.exercise);
+                
+                if (data.solutions && requestData.include_solutions) {
+                    displaySolutions(data.solutions);
+                } else {
+                    document.getElementById('solutionContainer').style.display = 'none';
+                }
+                
+                // Store current exercise ID if needed for evaluation
+                if (data.exercise_id) {
+                    localStorage.setItem('currentExerciseId', data.exercise_id);
+                }
+                
+                // Show answer submission form
+                document.getElementById('answerForm').style.display = 'block';
+                document.getElementById('evaluationContainer').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Error generating exercise:', error);
+                document.getElementById('exerciseContent').innerHTML = `
+                    <div class="error">
+                        Failed to generate exercise: ${error.message}
+                    </div>
+                `;
+            }
+        });
+        
+        // Answer submission logic
+        document.getElementById('submitAnswer').addEventListener('click', async () => {
+            const exerciseId = localStorage.getItem('currentExerciseId');
+            const studentAnswer = document.getElementById('studentAnswer').value;
+            
+            if (!studentAnswer.trim()) {
+                alert('Please enter your answer before submitting.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/exercises/evaluate-answer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        exercise_id: exerciseId,
+                        student_answer: studentAnswer,
+                        session_id: localStorage.getItem('sessionId') || null
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                displayEvaluation(data);
+                
+            } catch (error) {
+                console.error('Error evaluating answer:', error);
+                document.getElementById('evaluationContent').innerHTML = `
+                    <div class="error">
+                        Failed to evaluate answer: ${error.message}
+                    </div>
+                `;
+                document.getElementById('evaluationContainer').style.display = 'block';
+            }
+        });
+        
+        function displayExercise(exercise) {
+            const container = document.getElementById('exerciseContent');
+            let html = `<div class="exercise-instructions">${marked.parse(exercise.instructions)}</div>`;
+            
+            html += '<div class="questions">';
+            exercise.questions.forEach((q, index) => {
+                html += `
+                    <div class="question">
+                        <h3>Question ${index + 1}</h3>
+                        <p>${marked.parse(q.question)}</p>
+                `;
+                
+                if (q.options && q.options.length) {
+                    html += '<ul class="options">';
+                    q.options.forEach((option, i) => {
+                        html += `<li><label><input type="radio" name="q${index}" value="${i}"> ${marked.parse(option)}</label></li>`;
+                    });
+                    html += '</ul>';
+                } else if (q.type === 'fill_in_blank') {
+                    html += `<input type="text" class="fill-blank" placeholder="Your answer">`;
+                } else {
+                    html += `<textarea rows="3" placeholder="Your answer"></textarea>`;
+                }
+                
+                html += '</div>';
+            });
+            html += '</div>';
+            
+            container.innerHTML = html;
+        }
+        
+        function displaySolutions(solutions) {
+            const container = document.getElementById('solutionContent');
+            let html = '<div class="solutions">';
+            
+            solutions.answers.forEach((answer, index) => {
+                html += `
+                    <div class="solution">
+                        <h3>Solution ${index + 1}</h3>
+                        <p class="correct-answer"><strong>Correct Answer:</strong> ${
+                            typeof answer.correct_answer === 'string' 
+                            ? marked.parse(answer.correct_answer) 
+                            : `Option ${answer.correct_option + 1}`
+                        }</p>
+                        <div class="explanation">${marked.parse(solutions.explanations[index] || '')}</div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+            document.getElementById('solutionContainer').style.display = 'block';
+        }
+        
+        function displayEvaluation(evaluation) {
+            const container = document.getElementById('evaluationContent');
+            
+            const scorePercentage = Math.round(evaluation.score * 100);
+            const scoreClass = evaluation.is_correct ? 'score-correct' : 'score-incorrect';
+            
+            const html = `
+                <div class="evaluation">
+                    <div class="score ${scoreClass}">
+                        <span class="score-value">${scorePercentage}%</span>
+                        <span class="score-label">${evaluation.is_correct ? 'Correct' : 'Incorrect'}</span>
+                    </div>
+                    
+                    <div class="feedback">
+                        <h4>Feedback</h4>
+                        <p>${marked.parse(evaluation.feedback)}</p>
+                    </div>
+                    
+                    <div class="explanation">
+                        <h4>Explanation</h4>
+                        <p>${marked.parse(evaluation.explanation)}</p>
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+            document.getElementById('evaluationContainer').style.display = 'block';
+        }
+        
+        // Initialize session ID if not already set
+        if (!localStorage.getItem('sessionId')) {
+            localStorage.setItem('sessionId', `session_${Date.now().toString(36)}`);
+        }
+    </script>
+</body>
+</html>

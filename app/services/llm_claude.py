@@ -20,6 +20,7 @@ from datetime import datetime
 from services.rag_mongo_services import RAGServiceMongo
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, Union
+from models.exercise import ExerciseResponse, ExerciseType, ExerciseContent, Solution, EvaluationResult
 
 @dataclass
 class SessionContext:
@@ -87,7 +88,7 @@ class LLMService:
         """Crée une nouvelle conversation et génère un ID unique."""
         session_id = f"session_{uuid.uuid4()}"
         
-        await self.mongo_services.create_conversation(session_id)
+        await self.mongo_services.create_conversation(session_id)  # No more user_id
         return session_id
         
     
@@ -116,7 +117,7 @@ class LLMService:
         """Creates or retrieves a session context"""
         if not session_id:
             session_id = f"session_{uuid.uuid4()}"
-            await self.mongo_services.create_conversation(session_id, "anonymous")
+            await self.mongo_services.create_conversation(session_id)  # No more user_id
             self.conversation_store[session_id] = InMemoryHistory()
             return SessionContext(session_id=session_id, history=[])
             
@@ -260,3 +261,185 @@ class LLMService:
         })).content
 
         return one_liner_response
+
+    async def generate_exercise(self,
+                               subject: str,
+                               topic: str,
+                               exercise_type: ExerciseType,
+                               difficulty: str,
+                               number_of_questions: int,
+                               session_id: Optional[str] = None,
+                               teacher_id: Optional[str] = None) -> ExerciseResponse:
+        """Generate exercises based on subject and parameters"""
+        try:
+            session = await self._ensure_session(session_id)
+            
+            # Craft a specialized system prompt for exercise generation
+            exercise_system_prompt = f"""You are an expert educational exercise creator specialized in {subject}.
+            Create {number_of_questions} {difficulty}-level {exercise_type.value} questions about {topic}.
+            
+            Follow these guidelines:
+            1. Questions should be clear, precise, and appropriate for the {difficulty} difficulty level
+            2. For multiple-choice questions, include 4 options with exactly one correct answer
+            3. For math questions, use proper LaTeX formatting
+            4. Include detailed explanations for the solution
+            5. Return your response as structured data suitable for parsing
+            
+            Format your response in the following structure:
+            {{
+              "exercise": {{
+                "instructions": "Brief instructions for the exercise",
+                "questions": [
+                  {{ 
+                    "question": "Question text",
+                    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+                    "type": "{exercise_type.value}"
+                  }}
+                  // Additional questions...
+                ]
+              }},
+              "solutions": {{
+                "answers": [
+                  {{ 
+                    "correct_answer": "The correct answer or index", 
+                    "correct_option": 2  // For multiple-choice questions
+                  }}
+                  // Additional answers...
+                ],
+                "explanations": [
+                  "Detailed explanation for question 1",
+                  // Additional explanations...
+                ]
+              }}
+            }}
+            """
+            
+            messages = []
+            
+            # Use the teacher's style if available
+            if teacher_id:
+                teacher_data = await self.mongo_services.get_teacher(teacher_id)
+                if teacher_data:
+                    # Combine teacher prompt with exercise creation instructions
+                    combined_prompt = f"{teacher_data['prompt_instructions']}\n\n{exercise_system_prompt}"
+                    messages.append(SystemMessage(content=combined_prompt))
+                else:
+                    messages.append(SystemMessage(content=exercise_system_prompt))
+            else:
+                messages.append(SystemMessage(content=exercise_system_prompt))
+            
+            # Add the exercise request as a message
+            messages.append(HumanMessage(
+                content=f"Please create {number_of_questions} {difficulty} level exercises about {topic} in {subject} using {exercise_type.value} format."
+            ))
+            
+            # Generate response
+            response = await self.llm.agenerate([messages])
+            response_text = response.generations[0][0].text
+            
+            # Parse the JSON response
+            import json
+            import re
+            
+            # Extract JSON from the response (in case the LLM adds extra text)
+            json_match = re.search(r'({[\s\S]*})', response_text)
+            if json_match:
+                json_str = json_match.group(1)
+                try:
+                    exercise_data = json.loads(json_str)
+                    
+                    # Create structured response
+                    exercise_content = ExerciseContent(
+                        questions=exercise_data["exercise"]["questions"],
+                        instructions=exercise_data["exercise"]["instructions"]
+                    )
+                    
+                    solutions = None
+                    if "solutions" in exercise_data:
+                        solutions = Solution(
+                            answers=exercise_data["solutions"]["answers"],
+                            explanations=exercise_data["solutions"]["explanations"]
+                        )
+                    
+                    return ExerciseResponse(
+                        exercise=exercise_content,
+                        solutions=solutions
+                    )
+                except json.JSONDecodeError:
+                    raise ValueError("Failed to parse exercise data from LLM response")
+            else:
+                raise ValueError("No valid JSON structure found in LLM response")
+            
+        except Exception as e:
+            logger.error(f"Exercise generation failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    async def evaluate_answer(self,
+                            exercise_id: str,
+                            student_answer: str,
+                            session_id: Optional[str] = None) -> EvaluationResult:
+        """Evaluate a student's answer to an exercise"""
+        try:
+            # Retrieve the exercise and its solution from database
+            exercise_data = await self.mongo_services.get_exercise(exercise_id)
+            if not exercise_data:
+                raise ValueError(f"Exercise with ID {exercise_id} not found")
+            
+            session = await self._ensure_session(session_id)
+            
+            evaluation_prompt = f"""You are an expert educational evaluator. 
+            Evaluate the student's answer to the following question:
+            
+            Question: {exercise_data['question']}
+            
+            Correct answer: {exercise_data['correct_answer']}
+            
+            Student's answer: {student_answer}
+            
+            Provide an evaluation with:
+            1. Whether the answer is correct (true/false)
+            2. A score from 0.0 to 1.0
+            3. Constructive feedback
+            4. A detailed explanation of the correct answer
+            
+            Format your response as JSON:
+            {{
+              "is_correct": true/false,
+              "score": 0.0-1.0,
+              "feedback": "Your feedback here",
+              "explanation": "Detailed explanation here"
+            }}
+            """
+            
+            messages = [
+                SystemMessage(content=evaluation_prompt),
+                HumanMessage(content=f"Please evaluate this answer: {student_answer}")
+            ]
+            
+            # Generate evaluation
+            response = await self.llm.agenerate([messages])
+            response_text = response.generations[0][0].text
+            
+            # Parse JSON response
+            import json
+            import re
+            
+            json_match = re.search(r'({[\s\S]*})', response_text)
+            if json_match:
+                json_str = json_match.group(1)
+                try:
+                    evaluation_data = json.loads(json_str)
+                    return EvaluationResult(
+                        is_correct=evaluation_data["is_correct"],
+                        score=evaluation_data["score"],
+                        feedback=evaluation_data["feedback"],
+                        explanation=evaluation_data["explanation"]
+                    )
+                except json.JSONDecodeError:
+                    raise ValueError("Failed to parse evaluation data")
+            else:
+                raise ValueError("No valid evaluation data found in response")
+            
+        except Exception as e:
+            logger.error(f"Answer evaluation failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
