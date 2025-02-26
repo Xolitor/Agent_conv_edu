@@ -69,11 +69,10 @@ class MongoService:
         sessions = await cursor.to_list(length=None)
         return [session["session_id"] for session in sessions]
     
-    async def create_conversation(self, session_id: str, user_id: str) -> bool:
+    async def create_conversation(self, session_id: str) -> bool:
         """Crée une nouvelle conversation"""
         conversation = {
             "session_id": session_id,
-            "user_id": user_id,
             "messages": [],
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
@@ -81,17 +80,4 @@ class MongoService:
         
         result = await self.conversations.insert_one(conversation)
         return result.inserted_id is not None
-    
-    
-    ## Non fonctionnel A FAIRE
-    async def find_course(self, query: Dict) -> Optional[Dict]:
-        """Trouve un cours dans la base de données"""
-        return await self.db.courses.find_one(query)
-    
-    async def create_teacher(self, teacher_data: dict) -> bool:
-        result = await self.teachers.insert_one(teacher_data)
-        return result.inserted_id is not None
-    
-    async def get_teacher(self, teacher_id: str) -> Optional[dict] :
-        return await self.teachers.find_one({"teacher_id": teacher_id})
 

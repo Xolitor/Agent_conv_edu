@@ -16,11 +16,8 @@ from typing import Any, Dict, List
 import os
 import threading
 import logging
-from typing import List, Union, Optional
-from pathlib import Path
-
-
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from typing import List, Optional
+from fastapi import UploadFile, HTTPException
 from typing import List
 import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -32,7 +29,7 @@ from io import BytesIO
 from bs4 import BeautifulSoup
 import threading
 from typing import Optional
-import hashlib
+from bson import json_util
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -70,6 +67,45 @@ class RAGServiceMongo:
             relevance_score_fn="cosine",
         )
         
+        # Create the vector search index if it doesn't exist
+        # self._ensure_index()
+        
+    async def _ensure_index(self):
+        """Ensure the vector search index exists via Atlas Search"""
+        try:
+            # Note: Atlas Search indexes are managed through Atlas UI or API
+            # We can only verify if documents are being properly indexed
+            sample_doc = await self.collection.find_one({"embedding": {"$exists": True}})
+            if not sample_doc:
+                logger.warning("No documents with embeddings found. Index verification skipped.")
+                return
+            
+            # Test a simple search to verify index functionality
+            test_pipeline = [
+                {
+                    "$vectorSearch": {
+                        "index": "default",
+                        "path": "embedding",
+                        "queryVector": [0.0] * 1536,  # Dummy vector
+                        "numCandidates": 1,
+                        "limit": 1
+                    }
+                }
+            ]
+            
+            try:
+                cursor = self.collection.aggregate(test_pipeline)
+                await cursor.to_list(length=1)
+                logger.debug("Vector search index is functional")
+            except Exception as e:
+                logger.error(f"Vector search index test failed: {str(e)}")
+                logger.error("Please ensure the Atlas Search index is properly configured in MongoDB Atlas")
+                raise
+                
+        except Exception as e:
+            logger.error(f"Error verifying index: {str(e)}")
+            raise
+
     def clear(self) -> None:
         """
         Clears the MongoDB collection.
@@ -177,7 +213,11 @@ class RAGServiceMongo:
 
     async def get_document_count(self) -> int:
         """Get the total number of documents in the collection"""
-        return await self.collection.count_documents({})
+        try:
+            return await self.collection.count_documents({})
+        except Exception as e:
+            logger.error(f"Error getting document count: {str(e)}")
+            return 0
 
     async def similarity_search(self, query: str, k: int = 4) -> List[Dict[str, Any]]:
         """Perform similarity search using MongoDB Atlas Vector Search"""
@@ -222,6 +262,8 @@ class RAGServiceMongo:
                 logger.debug(f"Sample document exists: {sample is not None}")
             
             return results
+            # serialized_results = json_util.loads(json_util.dumps(results))
+            # return serialized_results
 
         except Exception as e:
             logger.error(f"Search failed with error: {str(e)}")

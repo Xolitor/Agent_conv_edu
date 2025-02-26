@@ -6,7 +6,7 @@ Inclut les endpoints du TP1 et du TP2
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Body
 from models.chat import ChatRequest, ChatResponse
-from services.llm_service import LLMService
+from services.llm_claude import LLMService
 from typing import Dict, List, Optional
 from fastapi import FastAPI, UploadFile, File
 from typing import List
@@ -26,7 +26,7 @@ llm_service = LLMService()
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    """Nouvel endpoint du TP2 avec gestion de session"""
+    """Unified chat endpoint supporting regular, teacher-specific, and RAG responses"""
     try:
         response = await llm_service.generate_response(
             message=request.message,
@@ -34,7 +34,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         )
         return ChatResponse(response=response)
     except Exception as e:
-        print(e)
+        logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/summarize", response_model=ChatResponse)
@@ -117,7 +117,7 @@ async def upload_filesv2(files: List[UploadFile] = File(...)):
     for file in files:
         try:
             # Process file content
-            chunks = await llm_service.rag_mongo_service.process_file(file)
+            chunks = await llm_service.mongo_services.process_file(file)
             
             # Create metadata
             metadata = {
@@ -127,7 +127,7 @@ async def upload_filesv2(files: List[UploadFile] = File(...)):
             }
             
             # Add to vector store
-            await llm_service.rag_mongo_service.add_texts_to_vectorstore(chunks, metadata)
+            await llm_service.mongo_services.add_texts_to_vectorstore(chunks, metadata)
             
             processed_files.append({
                 "filename": file.filename,
@@ -150,12 +150,12 @@ async def query_documents(query: str):
     try:
         
         # Get collection stats before search
-        doc_count = await llm_service.rag_mongo_service.get_document_count()
-        has_index = await llm_service.rag_mongo_service.verify_index()
+        doc_count = await llm_service.mongo_services.get_document_count()
+        has_index = await llm_service.mongo_services.verify_index()
         
         logger.debug(f"Collection status - Documents: {doc_count}, Has Index: {has_index}")
         
-        results = await llm_service.rag_mongo_service.similarity_search(query)
+        results = await llm_service.mongo_services.similarity_search(query)
         
         if not results:
             return {
@@ -181,11 +181,11 @@ from bson.objectid import ObjectId
 
 @router.get("/debug")
 async def debug_collection():
-    sample_doc = await llm_service.rag_mongo_service.collection.find_one(
+    sample_doc = await llm_service.mongo_services.collection.find_one(
         {}, 
         {'_id': 0}  # Exclude _id field from the result
     )
-    doc_count = await llm_service.rag_mongo_service.get_document_count()
+    doc_count = await llm_service.mongo_services.get_document_count()
     
     return {
         "sample_document": sample_doc,
@@ -214,35 +214,36 @@ async def index_documents(
 async def clear_documents() -> dict:
     """Endpoint pour supprimer tous les documents indexés"""
     try:
-        llm_service.rag_service.close()
-        llm_service.rag_service.clear()
+        llm_service.mongo_services.close()
+        llm_service.mongo_services.clear()
         return {"message": "Vector store cleared successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/rag", response_model=ChatResponse)
 async def chat_rag(request: ChatRequest) -> ChatResponse:
-    """Endpoint de chat utilisant le RAG"""
+    """Chat endpoint using RAG for knowledge augmentation"""
     try:
-        response = await llm_service.generate_answer_rag_v2(
+        response = await llm_service.generate_response(
             message=request.message,
             session_id=request.session_id,
             use_rag=True
         )
         return ChatResponse(response=response)
     except Exception as e:
+        logger.error(f"RAG chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/query")
-async def query_documentsv3(
+async def query_documents(
     query: str,
     session_id: Optional[str] = None,
     include_chunks: bool = False
 ):
-    """Enhanced query endpoint with session management"""
+    """Query documents and get contextual answers"""
     try:
         # Get similar chunks
-        chunks = await llm_service.rag_mongo_service.similarity_search(query)
+        chunks = await llm_service.mongo_services.similarity_search(query)
         
         if not chunks:
             return {
@@ -250,17 +251,11 @@ async def query_documentsv3(
                 "chunks": []
             }
         
-        # Get conversation history if session_id is provided
-        conversation_history = None
-        if session_id:
-            conversation_history = llm_service.conversation_store.get(session_id, [])
-        
-        # Generate answer using chunks and history
-        answer = await llm_service.generate_answer_rag_v2(
-            query,
-            chunks,
+        # Generate answer using the unified response generator
+        answer = await llm_service.generate_response(
+            message=query,
             session_id=session_id,
-            conversation_history=conversation_history
+            use_rag=True
         )
         
         response = {
@@ -279,4 +274,21 @@ async def query_documentsv3(
         
     except Exception as e:
         logger.error(f"Query endpoint error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/teacher-chat", response_model=ChatResponse)
+async def teacher_chat(
+    request: ChatRequest, 
+    teacher_id: str
+) -> ChatResponse:
+    """Chat with a specific teacher personality"""
+    try:
+        response = await llm_service.generate_response(
+            message=request.message,
+            session_id=request.session_id,
+            teacher_id=teacher_id
+        )
+        return ChatResponse(response=response)
+    except Exception as e:
+        logger.error(f"Teacher chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

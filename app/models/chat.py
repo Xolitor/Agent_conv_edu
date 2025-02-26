@@ -15,10 +15,6 @@ class ChatResponse(BaseModel):
 
 #################### Requête de base pour une conversation ####################
 
-class ChatRequestTP1(BaseModel):
-    """Requête de base pour une conversation sans contexte"""
-    message: str
-    
 class ChatRequest(BaseModel):
     """Requête de base pour une conversation sans contexte"""
     message: str
@@ -28,8 +24,3 @@ class ChatMessage(BaseModel):
     """Structure d'un message individuel dans l'historique"""
     role: str  # "user" ou "assistant"
     content: str
-    
-class ChatRequestWithCourseData(BaseModel):
-    """Requête avec données de cours pour le RAG"""
-    message: str  
-    course_id: str  
