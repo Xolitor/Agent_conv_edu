@@ -284,6 +284,7 @@ class LLMService:
             3. For math questions, use proper LaTeX formatting
             4. Include detailed explanations for the solution
             5. Return your response as structured data suitable for parsing
+            6. If a {teacher_id} is given make sure that the subject of the teacher matches the {subject} of the exercise.
             
             Format your response in the following structure:
             {{
@@ -356,11 +357,23 @@ class LLMService:
                     
                     solutions = None
                     if "solutions" in exercise_data:
+                        # Process answers to ensure correct types
+                        answers = exercise_data["solutions"]["answers"]
+                        for answer in answers:
+                            # Convert any integer correct_option to string
+                            if "correct_option" in answer and isinstance(answer["correct_option"], int):
+                                answer["correct_option"] = str(answer["correct_option"])
+                            
+                            # Convert any integers in lists to strings if needed
+                            for key, value in answer.items():
+                                if isinstance(value, list):
+                                    answer[key] = [str(item) if isinstance(item, int) else item for item in value]
+                        
                         solutions = Solution(
-                            answers=exercise_data["solutions"]["answers"],
+                            answers=answers,
                             explanations=exercise_data["solutions"]["explanations"]
                         )
-                    
+
                     return ExerciseResponse(
                         exercise=exercise_content,
                         solutions=solutions

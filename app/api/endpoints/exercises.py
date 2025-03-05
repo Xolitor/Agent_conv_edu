@@ -1,4 +1,5 @@
 
+from asyncio.log import logger
 from fastapi import APIRouter, HTTPException, Body, Query
 from models.chat import ChatRequest, ChatResponse
 from models.exercise import ExerciseRequest, ExerciseResponse, ExerciseType

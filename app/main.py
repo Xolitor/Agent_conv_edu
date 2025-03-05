@@ -29,9 +29,9 @@ llm_service = LLMService()
 
 # Inclure les routes
 app.include_router(api_router)
-app.include_router(chat.router, prefix="/api")
-app.include_router(chat_claude.router, prefix="/api/v2")
-app.include_router(exercises.router, prefix="/api/exercises")
+# app.include_router(chat.router, prefix="/api")
+# app.include_router(chat_claude.router, prefix="/api/v2")
+# app.include_router(exercises.router, prefix="/api/exercises")
 
 mongo_service = MongoService()
 @app.on_event("startup")

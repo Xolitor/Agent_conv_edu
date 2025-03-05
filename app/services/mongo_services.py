@@ -34,6 +34,7 @@ class MongoDBService:
         self.conversations = self.db[settings.collection_name]
         self.teachers = self.db[settings.teachers_database]
         self.rag_collection = self.db[settings.rag_database_name]
+        self.exercises = self.db[settings.exercises_database]
         
         # RAG-specific setup
         self.embeddings = OpenAIEmbeddings(api_key=os.getenv("OPENAI_API_KEY"))

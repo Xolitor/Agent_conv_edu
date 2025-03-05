@@ -31,7 +31,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/summarize", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
+async def summarize(request: ChatRequest) -> ChatResponse:
     """Nouvel endpoint permettant de tester le Sequencing Chain"""
     try:
         response = await llm_service.generate_response_sequencing(
@@ -150,19 +150,20 @@ async def clear_documents() -> dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/rag", response_model=ChatResponse)
-async def chat_rag(request: ChatRequest) -> ChatResponse:
-    """Chat endpoint using RAG for knowledge augmentation"""
-    try:
-        response = await llm_service.generate_response(
-            message=request.message,
-            session_id=request.session_id,
-            use_rag=True
-        )
-        return ChatResponse(response=response)
-    except Exception as e:
-        logger.error(f"RAG chat error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+#USELESS
+# @router.post("/rag", response_model=ChatResponse)
+# async def chat_rag(request: ChatRequest) -> ChatResponse:
+#     """Chat endpoint using RAG for knowledge augmentation"""
+#     try:
+#         response = await llm_service.generate_response(
+#             message=request.message,
+#             session_id=request.session_id,
+#             use_rag=True
+#         )
+#         return ChatResponse(response=response)
+#     except Exception as e:
+#         logger.error(f"RAG chat error: {str(e)}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/query")
 async def query_documents(

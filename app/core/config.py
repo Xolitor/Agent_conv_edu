@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     collection_name: str = "conversations"
     rag_database_name: str = "courses"
     teachers_database: str = "teachers"
+    exercises_database: str = "exercises"
     
     model_config = SettingsConfigDict(
         env_file='.env', 
