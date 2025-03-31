@@ -58,6 +58,15 @@ class MongoDBService:
         """Close the MongoDB connection"""
         self.client.close()
         logging.debug("MongoDB connection closed.")
+        
+    def clear(self) -> None:
+        """
+        Clears the MongoDB collection.
+        """
+        with self.lock:
+            logging.debug("Clearing MongoDB collection...")
+            self.rag_collection.delete_many({})  # Deletes all documents
+            logging.debug("Collection cleared.")
     
     #######################################
     # Conversation management operations  #
@@ -81,14 +90,20 @@ class MongoDBService:
         """Get teacher by ID"""
         return await self.teachers.find_one({"teacher_id": teacher_id})
     
-    async def save_message(self, session_id: str, role: str, content: str) -> bool:
+    async def save_message(self, session_id: str, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Save a new message in a conversation"""
         message = Message(role=role, content=content)
+        # Convert message to dictionary
+        message_dict = message.model_dump()
+    
+        # Add metadata if provided
+        if metadata:
+            message_dict["metadata"] = metadata
         
         result = await self.conversations.update_one(
             {"session_id": session_id},
             {
-                "$push": {"messages": message.model_dump()},
+                "$push": {"messages": message_dict},
                 "$set": {"updated_at": datetime.utcnow()},
                 "$setOnInsert": {"created_at": datetime.utcnow()}
             },
@@ -112,12 +127,37 @@ class MongoDBService:
     async def get_conversation_history(self, session_id: str) -> List[Dict]:
         """Get conversation history"""
         conversation = await self.conversations.find_one({"session_id": session_id})
+        formatted_messages = []
         if conversation:
             messages = conversation.get("messages", [])
-            for message in messages:
-                if "timestamp" in message and isinstance(message["timestamp"], datetime):
-                    message["timestamp"] = message["timestamp"].isoformat()
-            return messages
+            
+            for msg in messages:
+                # Convert datetime to string
+                if "timestamp" in msg and isinstance(msg["timestamp"], datetime):
+                    msg["timestamp"] = msg["timestamp"].isoformat()
+                    
+                # Include all fields
+                formatted_message = {
+                    "role": msg.get("role", ""),
+                    "content": msg.get("content", "")
+                }
+                
+                # Only include metadata if it exists
+                if "metadata" in msg and msg["metadata"] is not None:
+                    formatted_message["metadata"] = msg["metadata"]
+                
+                formatted_messages.append(formatted_message)
+            
+        return formatted_messages
+            # messages = conversation.get("messages", [])
+            # for message in messages:
+            #     if "timestamp" in message and isinstance(message["timestamp"], datetime):
+            #         message["timestamp"] = message["timestamp"].isoformat()
+                    
+                    
+            #     if "metadata" not in message:
+            #         message["metadata"] = None
+            # return messages
         return []
     
     async def delete_conversation(self, session_id: str) -> bool:
@@ -273,20 +313,10 @@ class MongoDBService:
             raise HTTPException(status_code=500, detail=f"Failed to add texts to vector store: {str(e)}")
     
     async def save_exercise(self, 
-                            subject: str,
-                            topic: str,
-                            exercise_data: dict,
-                            teacher_id: Optional[str] = None) -> str:
-        """Save an exercise to the database"""
-        exercise = {
-            "subject": subject,
-            "topic": topic,
-            "exercise_data": exercise_data,
-            "teacher_id": teacher_id,
-            "created_at": datetime.utcnow()
-        }
-        
-        result = await self.db.exercises.insert_one(exercise)
+                            exercise_data: dict[str, Any],
+                            ) -> str:
+        """Save an exercise to the database"""      
+        result = await self.exercises.insert_one(exercise_data)
         return str(result.inserted_id)
 
     async def get_exercise(self, exercise_id: str) -> Optional[Dict]:

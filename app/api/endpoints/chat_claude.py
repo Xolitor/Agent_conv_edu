@@ -4,6 +4,7 @@ Routes FastAPI pour le chatbot
 """
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Body, UploadFile, File
+from models.conversation import MessageHistoryResponse
 from models.chat import ChatRequest, ChatResponse
 from services.llm_claude import LLMService
 from typing import Dict, List, Optional
@@ -14,6 +15,7 @@ from asyncio.log import logger
 from bson.json_util import dumps, loads
 
 llm_service = LLMService()
+mongo_service = llm_service.mongo_services
 
 #################### endpoint pour le chatbot de base ####################
 
@@ -21,10 +23,42 @@ llm_service = LLMService()
 async def chat(request: ChatRequest) -> ChatResponse:
     """Unified chat endpoint supporting regular, teacher-specific, and RAG responses"""
     try:
+        # First save the user message to conversation history
+        if request.session_id:
+            await mongo_service.save_message(
+                request.session_id, 
+                "user", 
+                request.message,
+                metadata={"teacher_id": request.teacher_id if request.teacher_id else None}
+            )
+        
+        # Generate response
         response = await llm_service.generate_response(
             message=request.message,
-            session_id=request.session_id
+            session_id=request.session_id,
+            teacher_id=request.teacher_id,
+            use_rag=request.use_rag if hasattr(request, 'use_rag') else False
         )
+        
+        # Also log the assistant's response
+        if request.session_id:
+            metadata = {}
+            if request.teacher_id:
+                metadata["teacher_id"] = request.teacher_id
+            if hasattr(request, 'use_rag') and request.use_rag:
+                metadata["use_rag"] = True
+                
+            await mongo_service.save_message(
+                request.session_id,
+                "assistant",
+                response,
+                metadata=metadata if metadata else None
+            )
+    # try:
+    #     response = await llm_service.generate_response(
+    #         message=request.message,
+    #         session_id=request.session_id
+    #     )
         return ChatResponse(response=response)
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
@@ -44,8 +78,8 @@ async def summarize(request: ChatRequest) -> ChatResponse:
 
 #################### endpoints pour gestion de l'historique des conversations ####################
 
-@router.get("/history/{session_id}")
-async def get_history(session_id: str) -> List[Dict[str, str]]:
+@router.get("/history/{session_id}", response_model=List[MessageHistoryResponse])
+async def get_history(session_id: str):
     """Récupération de l'historique d'une conversation"""
     try:
         return await llm_service.get_conversation_history(session_id)
@@ -135,7 +169,7 @@ async def index_documents(
         clear_existing: Si True, supprime l'index existant avant d'indexer
     """
     try:
-        await llm_service.rag_service.load_and_index_texts(texts, clear_existing)
+        await llm_service.rag.load_and_index_texts(texts, clear_existing)
         return {"message": "Documents indexed successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

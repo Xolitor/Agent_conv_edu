@@ -14,10 +14,8 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from services.memory import InMemoryHistory
 import os
 from typing import Any, List, Dict, Optional
-# from services.mongo_service import MongoService
 from services.mongo_services import MongoDBService
 from datetime import datetime
-from services.rag_mongo_services import RAGServiceMongo
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, Union
 from models.exercise import ExerciseResponse, ExerciseType, ExerciseContent, Solution, EvaluationResult
@@ -92,14 +90,14 @@ class LLMService:
         return session_id
         
     
-    async def get_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
+    async def get_conversation_history(self, session_id: str) -> List[Dict]:
         """Récupère l'historique depuis MongoDB et initialise la mémoire"""
         # Attendre les données de MongoDB
         history = await self.mongo_services.get_conversation_history(session_id)
         # Initialiser EnhancedMemoryHistory avec les données récupérées
         self.conversation_store[session_id] = InMemoryHistory()
         self.conversation_store[session_id].add_messages(history)
-
+        
         return history
     
     async def delete_conversation(self, session_id: str) -> bool:
@@ -143,8 +141,12 @@ class LLMService:
         if session.session_id not in self.conversation_store:
             self.conversation_store[session.session_id] = InMemoryHistory()
         
-        self.conversation_store[session.session_id].add_user_message(user_message)
-        self.conversation_store[session.session_id].add_ai_message(assistant_response)
+        # Ajouter les messages à l'historique langchain
+        try:
+            self.conversation_store[session.session_id].add_user_message(user_message)
+            self.conversation_store[session.session_id].add_ai_message(assistant_response)
+        except Exception as e:
+            logger.error(f"Error updating conversation store: {str(e)}")
 
     async def generate_response(self,
                               message: str,
@@ -175,10 +177,22 @@ class LLMService:
 
             # Add conversation history if exists
             for msg in session.history:
-                if msg["role"] == "user":
-                    messages.append(HumanMessage(content=msg["content"]))
-                elif msg["role"] == "assistant":
-                    messages.append(AIMessage(content=msg["content"]))
+                if isinstance(msg, dict):
+                    # C'est un dictionnaire, accéder par clés
+                    if msg.get("role") == "user":
+                        messages.append(HumanMessage(content=msg.get("content", "")))
+                    elif msg.get("role") == "assistant":
+                        messages.append(AIMessage(content=msg.get("content", "")))
+                else:
+                    # C'est probablement un objet Message, accéder par attributs
+                    try:
+                        if hasattr(msg, "role") and msg.role == "user":
+                            messages.append(HumanMessage(content=msg.content))
+                        elif hasattr(msg, "role") and msg.role == "assistant":
+                            messages.append(AIMessage(content=msg.content))
+                    except AttributeError:
+                        # Log et ignorer les messages mal formatés
+                        logger.warning(f"Message mal formaté ignoré: {msg}")
 
             # Add the current message
             messages.append(HumanMessage(content=message))

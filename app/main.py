@@ -4,9 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.router import router as api_router
 from services.llm_claude import LLMService
 import uvicorn
-from services.mongo_service import MongoService
+from services.mongo_services import MongoDBService
 from models.teacher import initial_teachers
-from api.endpoints import chat, chat_claude, exercises
+from api.endpoints import chat_claude, exercises
 
 load_dotenv()
 
@@ -33,7 +33,7 @@ app.include_router(api_router)
 # app.include_router(chat_claude.router, prefix="/api/v2")
 # app.include_router(exercises.router, prefix="/api/exercises")
 
-mongo_service = MongoService()
+mongo_service = MongoDBService()
 @app.on_event("startup")
 async def startup_event():
     # Seed the teachers collection with initial data
