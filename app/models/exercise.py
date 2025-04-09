@@ -8,7 +8,6 @@ class ExerciseType(str, Enum):
     SHORT_ANSWER = "short_answer"
     CODE_CHALLENGE = "code_challenge"
     TRUE_OR_FALSE = "true_false"
-    MATH = "math"
 
 class ExerciseRequest(BaseModel):
     subject: str

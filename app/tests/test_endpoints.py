@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from  main import app
-from services.llm_claude import LLMService
+from app.services.llm_serv import LLMService
 
 client = TestClient(app)
 

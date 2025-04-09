@@ -2,11 +2,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.router import router as api_router
-from services.llm_claude import LLMService
+from services.llm_serv import LLMService
 import uvicorn
 from services.mongo_services import MongoDBService
 from models.teacher import initial_teachers
-from api.endpoints import chat_claude, exercises
 
 load_dotenv()
 

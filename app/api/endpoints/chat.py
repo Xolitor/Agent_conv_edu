@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Body, UploadFile, File
 from models.conversation import MessageHistoryResponse
 from models.chat import ChatRequest, ChatResponse
-from services.llm_claude import LLMService
+from services.llm_serv import LLMService
 from typing import Dict, List, Optional
 from pathlib import Path
 router = APIRouter()

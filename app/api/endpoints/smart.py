@@ -2,7 +2,7 @@ from asyncio.log import logger
 from fastapi import APIRouter, HTTPException, Body
 from models.chat import ChatRequest, ChatResponse
 from models.exercise import ExerciseType, ExerciseResponse, ExerciseRequest, ExerciseContent, Solution
-from services.llm_claude import LLMService
+from services.llm_serv import LLMService
 from services.mongo_services import MongoDBService
 from typing import Dict, Union, Any, Optional, List
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -458,7 +458,7 @@ async def analyze_intent(message: str, session_id: Optional[str] = None) -> Dict
         
     Retournez UNIQUEMENT un JSON valide avec l'une des structures suivantes selon l'intention de l'utilisateur :
         
-    1. Pour une conversation générale :
+    1. Pour une conversation générale ou des demandes de cours :
     {
     "intent": "chat"
     }
@@ -469,7 +469,7 @@ async def analyze_intent(message: str, session_id: Optional[str] = None) -> Dict
     "parameters": {
         "subject": "la matière concernée",
         "topic": "sujet spécifique dans la matière",
-        "exercise_type": "qcm",
+        "exercise_type": "type d'exercice (multiple_choice, fill_in_blank, short_answer, code_challenge, true_false, math_problem)",
         "difficulty": "facile/moyen/difficile/expert",
         "number_of_questions": entier entre 1-10
     }

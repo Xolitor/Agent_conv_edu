@@ -3,7 +3,7 @@ from asyncio.log import logger
 from fastapi import APIRouter, HTTPException, Body, Query
 from models.chat import ChatRequest, ChatResponse
 from models.exercise import ExerciseRequest, ExerciseResponse, ExerciseType
-from services.llm_claude import LLMService
+from services.llm_serv import LLMService
 from typing import Dict, List, Optional
 
 router = APIRouter()
