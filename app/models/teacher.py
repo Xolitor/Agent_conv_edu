@@ -1,14 +1,18 @@
-from typing import Dict, List, Optional
-from pydantic import BaseModel
+from typing import Dict, List, Optional, Any
+from pydantic import BaseModel, Field
+from datetime import datetime
 
-class Teacher(BaseModel) :
+class Teacher(BaseModel):
     teacher_id: str
     name: str
     subject: str
-    description : str
+    description: str
     prompt_instructions: Optional[str] = None
-    
-    
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    avatar_url: Optional[str] = None
+    specialties: Optional[List[str]] = None
+
 initial_teachers: List[Teacher] = [
     Teacher(
         teacher_id="maths_teacher",
@@ -183,3 +187,12 @@ Aucune erreur détectée.
         """
     )
 ]
+
+class TeacherResponse(BaseModel):
+    """Response model for teacher requests"""
+    teacher: Teacher
+
+class TeacherListResponse(BaseModel):
+    """Response model for listing teachers"""
+    teachers: List[Teacher]
+    count: int

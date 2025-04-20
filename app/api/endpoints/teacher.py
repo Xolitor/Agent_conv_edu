@@ -1,7 +1,11 @@
+"""
+Endpoints for teacher-specific functionality
+"""
 from fastapi import APIRouter, HTTPException, Body
 from models.chat import ChatRequest, ChatResponse
-from services.llm_serv import LLMService
+from services.llm_service import LLMService
 from typing import Dict, List
+from asyncio.log import logger
 
 router = APIRouter()
 llm_service = LLMService()
@@ -24,14 +28,16 @@ async def get_sessions() -> List[str]:
 
 @router.post("/{teacher_id}/chat", response_model=ChatResponse)
 async def chat_with_teacher(teacher_id: str, request: ChatRequest):
-        try :
-            response = await llm_service.generate_response(
-            teacher_id = teacher_id,
+    """
+    Chat with a specific teacher personality
+    """
+    try:
+        response = await llm_service.generate_response(
+            teacher_id=teacher_id,
             message=request.message,
             session_id=request.session_id
-            )
-            return ChatResponse(response=response)
-        except Exception as e:
-                print(e)
-                raise HTTPException(status_code=500, detail=str(e))
-        
+        )
+        return ChatResponse(response=response)
+    except Exception as e:
+        logger.error(f"Teacher chat error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

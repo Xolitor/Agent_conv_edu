@@ -2,9 +2,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.router import router as api_router
-from services.llm_serv import LLMService
+from services.llm_service import LLMService
 import uvicorn
-from services.mongo_services import MongoDBService
+from services.mongo_service import MongoDBService  # Updated import path
 from models.teacher import initial_teachers
 
 load_dotenv()
@@ -28,9 +28,6 @@ llm_service = LLMService()
 
 # Inclure les routes
 app.include_router(api_router)
-# app.include_router(chat.router, prefix="/api")
-# app.include_router(chat_claude.router, prefix="/api/v2")
-# app.include_router(exercises.router, prefix="/api/exercises")
 
 mongo_service = MongoDBService()
 @app.on_event("startup")

@@ -12,7 +12,11 @@ class InMemoryHistory(BaseChatMessageHistory):
     Pour un environnement de production, considérer une solution persistante comme Redis.
     """
     def __init__(self, *args) -> None:
-        self.messages: List[BaseMessage] = args if args else []
+        self.messages: List[BaseMessage] = list(args) if args else []
+    
+    def add_message(self, message: BaseMessage) -> None:
+        """Ajoute un message à l'historique"""
+        self.messages.append(message)
     
     def add_messages(self, messages: List[BaseMessage]) -> None:
         """Ajoute une série de messages à l'historique"""
@@ -21,6 +25,10 @@ class InMemoryHistory(BaseChatMessageHistory):
     def clear(self) -> None:
         """Réinitialise l'historique de la conversation"""
         self.messages = []
+
+    def get_messages(self) -> List[BaseMessage]:
+        """Récupère l'historique des messages de façon synchrone"""
+        return self.messages.copy()
 
     async def aget_messages(self) -> List[BaseMessage]:
         """Récupère l'historique des messages de façon asynchrone"""

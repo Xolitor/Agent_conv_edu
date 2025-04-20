@@ -20,3 +20,22 @@ class MessageHistoryResponse(BaseModel):
     content: str
     timestamp: Optional[str] = None
     metadata: Optional[Union[Dict[str, Any], None]] = None
+
+# Add model for conversation metadata
+class ConversationMetadata(BaseModel):
+    """Metadata about a conversation"""
+    total_messages: int
+    last_activity: datetime
+    created_at: datetime
+    
+class ConversationSummary(BaseModel):
+    """Summary information about a conversation"""
+    session_id: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int
+    
+class DeleteConversationResponse(BaseModel):
+    """Response for delete operation"""
+    success: bool
+    session_id: str

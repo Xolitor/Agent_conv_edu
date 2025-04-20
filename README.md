@@ -12,19 +12,30 @@ C:.
 ├───models/               # Modèles de données Pydantic
 │   └───chat.py          # Modèles pour les requêtes/réponses de chat
 ├───services/            # Services métier
-│   └───llm_service.py   # Service d'interaction avec le LLM
+│   ├───llm_service/     # Service d'interaction avec le LLM (modularisé)
+│   │   ├───core.py      # Classe principale du service LLM
+│   │   ├───exercise_manager.py  # Gestion des exercices
+│   │   ├───response_generator.py  # Génération de réponses
+│   │   └───session_manager.py  # Gestion des sessions
+│   ├───mongo_service/   # Service d'interaction avec MongoDB (modularisé)
+│   │   ├───core.py      # Classe principale du service MongoDB
+│   │   ├───conversation_manager.py  # Gestion des conversations
+│   │   ├───exercise_manager.py  # Gestion des exercices
+│   │   ├───rag_manager.py  # Gestion du RAG
+│   │   └───teacher_manager.py  # Gestion des enseignants
+│   └───memory.py        # Service de gestion de la mémoire
 ├───tests/            # Test unitaire sur le code
 │   └───test_mongo_service.py   # test lié à la base de donnée
 ├───utils/               # Utilitaires et helpers
 └───main.py             # Point d'entrée de l'application
 ```
 
-
 ## Réalisation
 - Un projet fonctionnel avec les endpoints du tp1 du tp2
 - Des endpoints supplémentaires pour gérer les conversations dans la BD MongoDB (effacer des conversations et lister toutes les sessions)
 - Des enpoints supplémentaires (2 endpoints) pour le projet chatbot educatif (seulement des prototypes, le endpoint cours (/ask) ne fonctionne pas)
-- Le projet est lié au backend MongoDB avec une seule collection pour le moment qui est conversation
+- Le projet est lié au backend MongoDB avec plusieurs collections (conversations, teachers, exercises, rag)
+- Architecture modulaire améliorée avec séparation des responsabilités
 - Le projet est lié au front React mais aucun changement n'a été apporté au repo de base
 - Le dossier de tests a été mis en place avec un premier test unitaire
 

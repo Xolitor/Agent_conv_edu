@@ -2,8 +2,8 @@ from asyncio.log import logger
 from fastapi import APIRouter, HTTPException, Body
 from models.chat import ChatRequest, ChatResponse
 from models.exercise import ExerciseType, ExerciseResponse, ExerciseRequest, ExerciseContent, Solution
-from services.llm_serv import LLMService
-from services.mongo_services import MongoDBService
+from services.llm_service import LLMService
+from services.mongo_service import MongoDBService  # Updated import
 from typing import Dict, Union, Any, Optional, List
 from langchain_core.messages import SystemMessage, HumanMessage
 import json

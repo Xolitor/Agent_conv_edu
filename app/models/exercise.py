@@ -8,6 +8,7 @@ class ExerciseType(str, Enum):
     SHORT_ANSWER = "short_answer"
     CODE_CHALLENGE = "code_challenge"
     TRUE_OR_FALSE = "true_false"
+    MATH_PROBLEM = "math_problem"  # Adding this type which is mentioned in prompts
 
 class ExerciseRequest(BaseModel):
     subject: str
@@ -46,3 +47,11 @@ class EvaluationResult(BaseModel):
     feedback: str
     score: float
     explanation: str
+
+class QuestionFeedback(BaseModel):
+    question_number: int
+    is_correct: bool
+    feedback: str
+
+class DetailedEvaluationResult(EvaluationResult):
+    question_feedback: Optional[List[QuestionFeedback]] = None

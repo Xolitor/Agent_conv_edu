@@ -1,28 +1,53 @@
 from fastapi import APIRouter
-from api.endpoints import exercises, smart, teacher, chat
+from api.endpoints import chat, conversation, teacher, exercise, rag, debug, smart
 
 router = APIRouter()
 
+# Chat functionality
 router.include_router(
     chat.router, 
     prefix="/chat", 
-    #tags=["chat"]
+    tags=["Chat"]
 )
 
+# Conversation management
 router.include_router(
-    exercises.router, 
-    prefix="/exercises", 
-    #tags=["Exercises"]
+    conversation.router, 
+    prefix="/conversation", 
+    tags=["Conversation"]
 )
 
-router.include_router(
-    smart.router, 
-    prefix="/smart", 
-    #tags=["SmartChat"]
-)
-
+# Teacher-specific functionality
 router.include_router(
     teacher.router, 
     prefix="/teacher", 
-    #tags=["Teacher"]
+    tags=["Teacher"]
+)
+
+# Exercise functionality
+router.include_router(
+    exercise.router, 
+    prefix="/exercise", 
+    tags=["Exercise"]
+)
+
+# RAG (Retrieval Augmented Generation)
+router.include_router(
+    rag.router, 
+    prefix="/rag", 
+    tags=["RAG"]
+)
+
+# Smart chat (unified experience)
+router.include_router(
+    smart.router, 
+    prefix="/smart", 
+    tags=["Smart"]
+)
+
+# Debug endpoints
+router.include_router(
+    debug.router, 
+    prefix="/debug", 
+    tags=["Debug"]
 )
