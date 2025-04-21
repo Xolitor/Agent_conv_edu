@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from api.endpoints import chat, conversation, teacher, exercise, rag, debug, smart
+from api.endpoints import chat, conversation, teacher, exercise, rag, smart_simplified
 
 router = APIRouter()
 
@@ -40,14 +40,7 @@ router.include_router(
 
 # Smart chat (unified experience)
 router.include_router(
-    smart.router, 
+    smart_simplified.router, 
     prefix="/smart", 
     tags=["Smart"]
-)
-
-# Debug endpoints
-router.include_router(
-    debug.router, 
-    prefix="/debug", 
-    tags=["Debug"]
 )

@@ -7,7 +7,9 @@ from fastapi import HTTPException
 from langchain_core.messages import SystemMessage, HumanMessage
 import json
 import re
+import traceback
 from typing import Dict, List, Optional, Any, Union
+from datetime import datetime  # Ensure this import is present
 from models.exercise import ExerciseResponse, ExerciseType, ExerciseContent, Solution, EvaluationResult
 
 class ExerciseManager:
@@ -245,4 +247,146 @@ class ExerciseManager:
             
         except Exception as e:
             logger.error(f"Answer evaluation failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    async def generate_hint(self,
+                           exercise_id: str,
+                           question_number: Optional[int] = None,
+                           session_id: Optional[str] = None) -> str:
+        """Generate a helpful hint for a specific exercise question"""
+        try:
+            # Retrieve the exercise and its solutions from database
+            exercise_data = await self.mongo_service.get_exercise(exercise_id)
+            if not exercise_data:
+                raise ValueError(f"Exercise with ID {exercise_id} not found")
+            
+            session = await self._ensure_session(session_id)
+            
+            # Extract the specific question or the entire exercise
+            exercise_content = exercise_data.get("exercise", {})
+            solutions = exercise_data.get("solutions", {})
+            
+            question_content = None
+            solution_content = None
+            
+            if question_number is not None and "questions" in exercise_content:
+                # Get specific question
+                if 0 <= question_number - 1 < len(exercise_content["questions"]):
+                    question_content = exercise_content["questions"][question_number - 1]
+                    
+                    # Get corresponding solution if available
+                    if "answers" in solutions and 0 <= question_number - 1 < len(solutions["answers"]):
+                        solution_content = solutions["answers"][question_number - 1]
+                        
+                        # Add explanation if available
+                        if "explanations" in solutions and 0 <= question_number - 1 < len(solutions["explanations"]):
+                            solution_content["explanation"] = solutions["explanations"][question_number - 1]
+            else:
+                # Use entire exercise
+                question_content = exercise_content
+                solution_content = solutions
+            
+            # Create the prompt for hint generation
+            hint_system_prompt = """You are a supportive educational assistant.
+            
+            TASK: Generate a helpful hint for the student without revealing the complete solution.
+            
+            Guidelines:
+            1. Provide guidance that helps the student think about the problem
+            2. Do NOT reveal the full solution
+            3. Be encouraging and supportive
+            4. Focus only on the specific question(s) asked
+            5. Offer a step or concept that leads toward the solution
+            6. For math problems, consider suggesting formulas or approaches
+            """
+            
+            hint_user_prompt = f"""Exercise question: 
+            {json.dumps(question_content)}
+            
+            Solution information (use this to create your hint, NOT to give away the answer):
+            {json.dumps(solution_content)}
+            
+            Please provide a helpful hint for question {question_number if question_number else "this exercise"}.
+            """
+            
+            messages = [
+                SystemMessage(content=hint_system_prompt),
+                HumanMessage(content=hint_user_prompt)
+            ]
+            
+            # Generate hint
+            response = await self.llm.agenerate([messages])
+            hint = response.generations[0][0].text
+            
+            # Store the hint in the database for future reference
+            hint_data = {
+                "exercise_id": exercise_id,
+                "question_number": question_number,
+                "hint": hint,
+                "session_id": session["session_id"],
+                "created_at": datetime.utcnow()  # Make sure datetime is properly imported
+            }
+            await self.mongo_service.save_hint(hint_data)
+            
+            return hint
+            
+        except Exception as e:
+            # Enhanced error logging
+            stack_trace = traceback.format_exc()
+            logger.error(f"Hint generation failed: {str(e)}\nStack trace: {stack_trace}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    async def get_solutions(self,
+                          exercise_id: str,
+                          session_id: Optional[str] = None) -> Solution:
+        """Retrieve and format solutions for an exercise"""
+        try:
+            # Retrieve the exercise and its solutions from database
+            exercise_data = await self.mongo_service.get_exercise(exercise_id)
+            if not exercise_data:
+                raise ValueError(f"Exercise with ID {exercise_id} not found")
+            
+            # Extract solutions section
+            solutions = exercise_data.get("solutions", {})
+            if not solutions:
+                raise ValueError("No solutions available for this exercise")
+            
+            # Format solutions according to the model
+            formatted_solutions = Solution(**solutions)
+            
+            # If session is provided, save a record of solutions being viewed
+            if session_id:
+                session = await self._ensure_session(session_id)
+                
+                # Format the solution as a friendly message for the chat history
+                response_text = "Solutions for all questions:\n\n"
+                
+                for i, answer in enumerate(solutions.get("answers", [])):
+                    response_text += f"Question {i+1}:\n"
+                    if isinstance(answer, dict):
+                        if "correct_option" in answer:
+                            response_text += f"Correct option: {answer['correct_option']}\n"
+                        if "correct_answer" in answer:
+                            response_text += f"Correct answer: {answer['correct_answer']}\n"
+                    else:
+                        response_text += f"{answer}\n"
+                    
+                    # Add explanation if available
+                    if "explanations" in solutions and i < len(solutions["explanations"]):
+                        response_text += f"Explanation: {solutions['explanations'][i]}\n"
+                    
+                    response_text += "\n"
+                
+                # Save to conversation history
+                await self.mongo_service.save_message(
+                    session["session_id"],
+                    "assistant",
+                    response_text,
+                    metadata={"type": "solution", "exercise_id": exercise_id}
+                )
+            
+            return formatted_solutions
+            
+        except Exception as e:
+            logger.error(f"Solutions retrieval failed: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))

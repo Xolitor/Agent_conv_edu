@@ -13,7 +13,7 @@ class ExerciseType(str, Enum):
 class ExerciseRequest(BaseModel):
     subject: str
     topic: str
-    exercise_type: ExerciseType = ExerciseType.MULTIPLE_CHOICE
+    exercise_type: ExerciseType = Field(..., description="Type of exercise to generate")
     include_solutions: bool = False
     session_id: Optional[str] = None
     teacher_id: Optional[str] = None

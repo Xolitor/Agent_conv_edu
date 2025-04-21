@@ -122,23 +122,3 @@ async def query_documents(
     except Exception as e:
         logger.error(f"Query documents error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/debug")
-async def debug_collection():
-    """
-    Debug endpoint to inspect RAG collection
-    """
-    try:
-        sample_doc = await mongo_service.collection.find_one(
-            {}, 
-            {'_id': 0}  # Exclude _id field from the result
-        )
-        doc_count = await mongo_service.get_document_count()
-        
-        return {
-            "sample_document": sample_doc,
-            "document_count": doc_count
-        }
-    except Exception as e:
-        logger.error(f"Debug collection error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))

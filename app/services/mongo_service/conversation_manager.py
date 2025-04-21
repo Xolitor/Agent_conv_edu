@@ -4,6 +4,7 @@ Manages conversations and message history in MongoDB
 from asyncio.log import logger
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from bson import ObjectId  # Import ObjectId for MongoDB operations
 from models.conversation import Message
 
 class ConversationManager:
@@ -15,6 +16,18 @@ class ConversationManager:
         self.collection = collection
         logger.info("Conversation Manager initialized")
     
+    async def check_session_exists(self, session_id: str) -> bool:
+        """Check if a session exists"""
+        try:
+            # Try to convert to ObjectId to catch format errors early
+            object_id = ObjectId(session_id)
+            # Check if the session exists
+            session = await self.db.conversations.find_one({"_id": object_id})
+            return session is not None
+        except Exception as e:
+            logger.error(f"Error checking session existence: {str(e)}")
+            return False
+
     async def save_message(self, session_id: str, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Save a new message in a conversation"""
         # Create a message document directly (don't use Pydantic model conversion which might cause issues)

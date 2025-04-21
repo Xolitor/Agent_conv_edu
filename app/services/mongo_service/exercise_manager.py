@@ -53,3 +53,77 @@ class ExerciseManager:
         except Exception as e:
             logger.error(f"Failed to delete exercise: {str(e)}")
             return False
+    
+    async def save_hint(self, hint_data: Dict[str, Any]) -> str:
+        """Save a hint to the database"""
+        try:
+            result = await self.db.exercise_hints.insert_one(hint_data)
+            return str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"Failed to save hint: {str(e)}")
+            raise
+    
+    async def get_hints_by_exercise(self, exercise_id: str) -> List[Dict]:
+        """Get all hints associated with an exercise"""
+        try:
+            cursor = self.db.exercise_hints.find({"exercise_id": exercise_id}).sort("created_at", -1)
+            return await cursor.to_list(length=100)
+        except Exception as e:
+            logger.error(f"Failed to retrieve hints: {str(e)}")
+            return []
+    
+    async def get_hint(self, hint_id: str) -> Optional[Dict]:
+        """Retrieve a specific hint by ID"""
+        try:
+            result = await self.db.exercise_hints.find_one({"_id": ObjectId(hint_id)})
+            return result
+        except Exception as e:
+            logger.error(f"Failed to retrieve hint: {str(e)}")
+            return None
+    
+    async def get_solutions(self, exercise_id: str) -> Optional[Dict]:
+        """Get solutions for a specific exercise"""
+        try:
+            exercise = await self.get_exercise(exercise_id)
+            if exercise and "solutions" in exercise:
+                return exercise["solutions"]
+            return None
+        except Exception as e:
+            logger.error(f"Failed to retrieve solutions: {str(e)}")
+            return None
+    
+    async def save_evaluation(self, evaluation_data: Dict[str, Any]) -> str:
+        """Save an exercise evaluation to the database"""
+        try:
+            result = await self.db.exercise_evaluations.insert_one(evaluation_data)
+            return str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"Failed to save evaluation: {str(e)}")
+            raise
+    
+    async def get_evaluation(self, evaluation_id: str) -> Optional[Dict]:
+        """Retrieve a specific evaluation by ID"""
+        try:
+            result = await self.db.exercise_evaluations.find_one({"_id": ObjectId(evaluation_id)})
+            return result
+        except Exception as e:
+            logger.error(f"Failed to retrieve evaluation: {str(e)}")
+            return None
+    
+    async def get_evaluations_by_exercise(self, exercise_id: str) -> List[Dict]:
+        """Get all evaluations for a specific exercise"""
+        try:
+            cursor = self.db.exercise_evaluations.find({"exercise_id": exercise_id}).sort("created_at", -1)
+            return await cursor.to_list(length=100)
+        except Exception as e:
+            logger.error(f"Failed to retrieve evaluations: {str(e)}")
+            return []
+    
+    async def get_evaluations_by_session(self, session_id: str) -> List[Dict]:
+        """Get all evaluations for a specific session"""
+        try:
+            cursor = self.db.exercise_evaluations.find({"session_id": session_id}).sort("created_at", -1)
+            return await cursor.to_list(length=100)
+        except Exception as e:
+            logger.error(f"Failed to retrieve evaluations: {str(e)}")
+            return []

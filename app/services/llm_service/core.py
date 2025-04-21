@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Any, Union
 from services.llm_service.session_manager import SessionManager
 from services.llm_service.response_generator import ResponseGenerator
 from services.llm_service.exercise_manager import ExerciseManager
+from services.llm_service.router_service import RouterService
 from services.mongo_service import MongoDBService
 
 class LLMService:
@@ -34,29 +35,85 @@ class LLMService:
             api_key=api_key
         )
         
-        # Initialize specialized components
+        # Initialize specialized components in proper order
+        # (components that depend on other components come later)
         self.session_manager = SessionManager(self.mongo_services)
         self.response_generator = ResponseGenerator(self.llm, self.mongo_services, self.session_manager)
         self.exercise_manager = ExerciseManager(self.llm, self.mongo_services)
         
-        # Keep only the chains needed for sequencing demo
-        self.main_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant utile et concis en expliquant avec des exemples de jeux vidéos."),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{question}")
-        ])
-        
-        self.bullet_points_chain = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant qui ajoute des jetons à la fin du texte."),
-            ("human", "Résumé sous forme de points clés : {text}")
-        ]) | self.llm
-
-        self.one_liner_chain = ChatPromptTemplate.from_messages([
-            ("system", "Vous êtes un assistant qui ajoute un résumé en une phrase à la fin du texte."),
-            ("human", "Résumé en une phrase : {text}")
-        ]) | self.llm
+        # Initialize router last as it depends on other components
+        self.router_service = RouterService(
+            llm=self.llm,
+            mongo_service=self.mongo_services,
+            response_generator=self.response_generator,
+            exercise_manager=self.exercise_manager
+        )
         
         logger.info("LLM Service initialized")
+        
+    #################### Smart routing ####################
+    
+    async def smart_chat(self,
+                        message: str,
+                        session_id: Optional[str] = None,
+                        teacher_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Smart chat that automatically routes to the appropriate functionality
+        
+        Args:
+            message: User's message
+            session_id: Optional session ID
+            teacher_id: Optional teacher ID
+            
+        Returns:
+            Dict containing response and metadata
+        """
+        # First, save the user message to conversation history if session_id exists
+        if session_id:
+            await self.mongo_services.save_message(
+                session_id, 
+                "user", 
+                message,
+                metadata={"teacher_id": teacher_id if teacher_id else None}
+            )
+        else:
+            # Create a new session if none provided
+            session_id = await self.mongo_services.create_conversation()
+            await self.mongo_services.save_message(
+                session_id,
+                "user",
+                message,
+                metadata={"teacher_id": teacher_id if teacher_id else None}
+            )
+        
+        # Use router to determine the best handler
+        result = await self.router_service.route_query(
+            query=message,
+            session_id=session_id,
+            teacher_id=teacher_id
+        )
+        
+        # Save the assistant's response
+        if session_id:
+            metadata = {
+                "route": result.get("route"),
+                "teacher_id": teacher_id if teacher_id else None
+            }
+            
+            if "action" in result:
+                metadata["action"] = result["action"]
+                
+            await self.mongo_services.save_message(
+                session_id,
+                "assistant",
+                result["response"],
+                metadata=metadata
+            )
+        
+        # Add session_id to result for convenience
+        result["session_id"] = session_id
+            
+        return result
     
     #################### Session and conversation management ####################
     
@@ -95,24 +152,6 @@ class LLMService:
             teacher_id=teacher_id,
             use_rag=use_rag
         )
-    
-    async def generate_response_sequencing(self, message: str, session_id: str = "") -> str:
-        """Generate a comprehensive response with multiple processing steps"""
-        main_chain = self.main_prompt | self.llm
-        main_response = (await main_chain.ainvoke({
-            "history":  [],
-            "question": message
-        })).content
-
-        bullet_points_response = (await self.bullet_points_chain.ainvoke({
-            "text": main_response
-        })).content
-
-        one_liner_response = (await self.one_liner_chain.ainvoke({
-            "text": bullet_points_response
-        })).content
-
-        return one_liner_response
     
     #################### Exercise management ####################
     
