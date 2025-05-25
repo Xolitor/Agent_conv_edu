@@ -9,12 +9,12 @@ import json
 import re
 import traceback
 from typing import Dict, List, Optional, Any, Union
-from datetime import datetime  # Ensure this import is present
-from models.exercise import ExerciseResponse, ExerciseType, ExerciseContent, Solution, EvaluationResult
+from datetime import datetime
+from bson import ObjectId
 
 class ExerciseManager:
     """
-    Manages exercise generation, evaluation, and solution retrieval
+    Manages exercise generation, evaluation, and solution retrieval using direct JSON
     """
     def __init__(self, llm, mongo_service):
         """Initialize with LLM and MongoDB service"""
@@ -32,20 +32,19 @@ class ExerciseManager:
         return {"session_id": session_id, "history": history}
     
     async def generate_exercise(self,
-                               subject: str,
-                               topic: str,
-                               exercise_type: ExerciseType,
-                               difficulty: str,
-                               number_of_questions: int,
-                               session_id: Optional[str] = None,
-                               teacher_id: Optional[str] = None) -> ExerciseResponse:
-        """Generate exercises based on subject and parameters"""
+                              subject: str,
+                              topic: str,
+                              exercise_type: str,
+                              difficulty: str,
+                              number_of_questions: int,
+                              session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Generate exercises based on subject and parameters - returns raw JSON"""
         try:
             session = await self._ensure_session(session_id)
             
             # Craft a specialized system prompt for exercise generation
             exercise_system_prompt = f"""You are an expert educational exercise creator specialized in {subject}.
-            Create {number_of_questions} {difficulty}-level {exercise_type.value} questions about {topic}.
+            Create {number_of_questions} {difficulty}-level {exercise_type} questions about {topic}.
             
             Follow these guidelines:
             1. Questions should be clear, precise, and appropriate for the {difficulty} difficulty level
@@ -53,7 +52,6 @@ class ExerciseManager:
             3. For math questions, use proper LaTeX formatting
             4. Include detailed explanations for the solution
             5. Return your response as structured data suitable for parsing
-            6. If a {teacher_id} is given make sure that the subject of the teacher matches the {subject} of the exercise.
             
             Format your response in the following structure in JSON (this example is for multiple choice exercise):
             {{
@@ -63,7 +61,7 @@ class ExerciseManager:
                   {{ 
                     "question": "Question text",
                     "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-                    "type": "{exercise_type.value}"
+                    "type": "{exercise_type}"
                   }}
                   // Additional questions...
                 ]
@@ -72,7 +70,7 @@ class ExerciseManager:
                 "answers": [
                   {{ 
                     "correct_answer": "The correct answer or index", 
-                    "correct_option": 2  // For multiple-choice questions
+                    "correct_option": "2"  // For multiple-choice questions, use string format
                   }}
                   // Additional answers...
                 ],
@@ -84,53 +82,14 @@ class ExerciseManager:
             }}
             
             Note: Ensure that the JSON is valid and well-structured.
-            
-            Another example for a math exercise:
-            {{
-              "exercise": {{
-                "instructions": "Solve the following math problems",
-                "questions": [
-                  {{ 
-                    "question": "What is 2 + 2?",
-                    "options": [],
-                    "type": "{exercise_type.value}"
-                  }}
-                  // Additional questions...
-                ]
-              }},
-              "solutions": {{
-                "answers": [
-                  {{ 
-                    "correct_answer": 4, 
-                    "correct_option": null  // No options for math questions
-                  }}
-                  // Additional answers...
-                ],
-                "explanations": [
-                  "2 + 2 = 4",
-                  // Additional explanations...
-                ]
-              }}
-            }}
             """
             
             messages = []
-            
-            # Use the teacher's style if available
-            if teacher_id:
-                teacher_data = await self.mongo_service.get_teacher(teacher_id)
-                if teacher_data:
-                    # Combine teacher prompt with exercise creation instructions
-                    combined_prompt = f"{teacher_data['prompt_instructions']}\n\n{exercise_system_prompt}"
-                    messages.append(SystemMessage(content=combined_prompt))
-                else:
-                    messages.append(SystemMessage(content=exercise_system_prompt))
-            else:
-                messages.append(SystemMessage(content=exercise_system_prompt))
+            messages.append(SystemMessage(content=exercise_system_prompt))
             
             # Add the exercise request as a message
             messages.append(HumanMessage(
-                content=f"Please create {number_of_questions} {difficulty} level exercises about {topic} in {subject} using {exercise_type.value} format."
+                content=f"Please create {number_of_questions} {difficulty} level exercises about {topic} in {subject} using {exercise_type} format."
             ))
             
             # Generate response
@@ -144,35 +103,17 @@ class ExerciseManager:
                 try:
                     exercise_data = json.loads(json_str)
                     
-                    # Create structured response
-                    exercise_content = ExerciseContent(
-                        questions=exercise_data["exercise"]["questions"],
-                        instructions=exercise_data["exercise"]["instructions"]
-                    )
+                    # Process the JSON to ensure consistent types
+                    # Convert any integer correct_option to string for consistency
+                    if "solutions" in exercise_data and "answers" in exercise_data["solutions"]:
+                        for answer in exercise_data["solutions"]["answers"]:
+                            if isinstance(answer, dict) and "correct_option" in answer:
+                                if isinstance(answer["correct_option"], int):
+                                    answer["correct_option"] = str(answer["correct_option"])
                     
-                    solutions = None
-                    if "solutions" in exercise_data:
-                        # Process answers to ensure correct types
-                        answers = exercise_data["solutions"]["answers"]
-                        for answer in answers:
-                            # Convert any integer correct_option to string
-                            if "correct_option" in answer and isinstance(answer["correct_option"], int):
-                                answer["correct_option"] = str(answer["correct_option"])
-                            
-                            # Convert any integers in lists to strings if needed
-                            for key, value in answer.items():
-                                if isinstance(value, list):
-                                    answer[key] = [str(item) if isinstance(item, int) else item for item in value]
-                        
-                        solutions = Solution(
-                            answers=answers,
-                            explanations=exercise_data["solutions"]["explanations"]
-                        )
-
-                    return ExerciseResponse(
-                        exercise=exercise_content,
-                        solutions=solutions
-                    )
+                    # Return the processed JSON directly
+                    return exercise_data
+                    
                 except json.JSONDecodeError:
                     raise ValueError("Failed to parse exercise data from LLM response")
             else:
@@ -181,72 +122,104 @@ class ExerciseManager:
         except Exception as e:
             logger.error(f"Exercise generation failed: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
-    
-    async def evaluate_answer(self,
-                            exercise_id: str,
-                            student_answer: str,
-                            session_id: Optional[str] = None) -> EvaluationResult:
-        """Evaluate a student's answer to an exercise"""
+
+    async def evaluate_exercise(self,
+                              exercise_id: str,
+                              user_answers: List[Dict[str, Any]],
+                              session_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Evaluate user answers for a previously generated exercise
+        """
         try:
-            # Retrieve the exercise and its solution from database
-            exercise_data = await self.mongo_service.get_exercise(exercise_id)
-            if not exercise_data:
-                raise ValueError(f"Exercise with ID {exercise_id} not found")
+            # Retrieve the exercise with solutions from MongoDB
+            exercise = await self.mongo_service.exercises.find_one({"_id": ObjectId(exercise_id)})
             
-            session = await self._ensure_session(session_id)
+            if not exercise:
+                raise HTTPException(status_code=404, detail="Exercise not found")
             
-            evaluation_prompt = f"""You are an expert educational evaluator. 
-            Evaluate the student's answer to the following question:
+            if not exercise.get("solutions"):
+                raise HTTPException(status_code=404, detail="No solutions available for this exercise")
             
-            Question: {exercise_data['question']}
+            # Prepare for evaluation
+            system_prompt = """Vous êtes un assistant d'évaluation pédagogique.
+                    
+            TÂCHE : Évaluez les réponses de l'élève par rapport aux solutions correctes d'un exercice.
+                    
+            Retournez UNIQUEMENT un JSON valide avec la structure suivante :
+            {
+            "is_correct": true/false,
+            "feedback": "Retour global sur la performance",
+            "score": décimal entre 0.0 et 1.0,
+            "explanation": "Explication détaillée des réponses correctes/incorrectes",
+            "question_feedback": [
+                {
+                "question_number": 1,
+                "is_correct": true/false,
+                "feedback": "Retour pour cette question spécifique"
+                }
+            ]
+            }
+                    
+            Règles :
+            - Comparez chaque réponse de l'élève à la solution correspondante
+            - Calculez un score global comme (nombre de réponses correctes / total des questions)
+            - Fournissez un retour utile et constructif
+            - Soyez indulgent avec les différences mineures d'orthographe ou les variations de formatage
+            """
             
-            Correct answer: {exercise_data['correct_answer']}
+            # Convert exercise and user answers to JSON
+            exercise_json = json.dumps({
+                "exercise": exercise["exercise"],
+                "solutions": exercise["solutions"]
+            })
+            user_answers_json = json.dumps(user_answers)
             
-            Student's answer: {student_answer}
+            user_prompt = f"""Exercise with solutions:
+            {exercise_json}
             
-            Provide an evaluation with:
-            1. Whether the answer is correct (true/false)
-            2. A score from 0.0 to 1.0
-            3. Constructive feedback
-            4. A detailed explanation of the correct answer
+            Student answers:
+            {user_answers_json}
             
-            Format your response as JSON:
-            {{
-              "is_correct": true/false,
-              "score": 0.0-1.0,
-              "feedback": "Your feedback here",
-              "explanation": "Detailed explanation here"
-            }}
+            Veuillez évaluer les réponses de l'étudiant et fournir des commentaires.
             """
             
             messages = [
-                SystemMessage(content=evaluation_prompt),
-                HumanMessage(content=f"Please evaluate this answer: {student_answer}")
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
             ]
             
-            # Generate evaluation
             response = await self.llm.agenerate([messages])
             response_text = response.generations[0][0].text
             
-            # Parse JSON response
+            # Extract JSON from response
             json_match = re.search(r'({[\s\S]*})', response_text)
             if json_match:
                 json_str = json_match.group(1)
                 try:
-                    evaluation_data = json.loads(json_str)
-                    return EvaluationResult(
-                        is_correct=evaluation_data["is_correct"],
-                        score=evaluation_data["score"],
-                        feedback=evaluation_data["feedback"],
-                        explanation=evaluation_data["explanation"]
-                    )
+                    result = json.loads(json_str)
+                    
+                    # Store the evaluation result in MongoDB for reference
+                    evaluation_id = await self.mongo_service.db.exercise_evaluations.insert_one({
+                        "exercise_id": exercise_id,
+                        "user_answers": user_answers,
+                        "evaluation": result,
+                        "session_id": session_id,
+                        "created_at": datetime.utcnow()
+                    })
+                    
+                    # Add the evaluation ID to the result
+                    result["_id"] = str(evaluation_id.inserted_id)
+                    
+                    return result
                 except json.JSONDecodeError:
-                    raise ValueError("Failed to parse evaluation data")
+                    raise HTTPException(status_code=500, detail="Failed to parse evaluation data")
             else:
-                raise ValueError("No valid evaluation data found in response")
-            
+                raise HTTPException(status_code=500, detail="No valid evaluation data found in response")
+        
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.error(f"Answer evaluation failed: {str(e)}")
+            logger.error(f"Evaluation error: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
     
     async def generate_hint(self,
@@ -324,7 +297,7 @@ class ExerciseManager:
                 "question_number": question_number,
                 "hint": hint,
                 "session_id": session["session_id"],
-                "created_at": datetime.utcnow()  # Make sure datetime is properly imported
+                "created_at": datetime.utcnow()
             }
             await self.mongo_service.save_hint(hint_data)
             
@@ -338,7 +311,7 @@ class ExerciseManager:
     
     async def get_solutions(self,
                           exercise_id: str,
-                          session_id: Optional[str] = None) -> Solution:
+                          session_id: Optional[str] = None) -> Dict[str, Any]:
         """Retrieve and format solutions for an exercise"""
         try:
             # Retrieve the exercise and its solutions from database
@@ -350,9 +323,6 @@ class ExerciseManager:
             solutions = exercise_data.get("solutions", {})
             if not solutions:
                 raise ValueError("No solutions available for this exercise")
-            
-            # Format solutions according to the model
-            formatted_solutions = Solution(**solutions)
             
             # If session is provided, save a record of solutions being viewed
             if session_id:
@@ -385,7 +355,7 @@ class ExerciseManager:
                     metadata={"type": "solution", "exercise_id": exercise_id}
                 )
             
-            return formatted_solutions
+            return solutions
             
         except Exception as e:
             logger.error(f"Solutions retrieval failed: {str(e)}")

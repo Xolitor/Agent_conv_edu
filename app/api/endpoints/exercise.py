@@ -3,8 +3,6 @@ Endpoints for exercise generation and evaluation
 """
 from fastapi import APIRouter, HTTPException, Body, Query, Depends
 from models.chat import ChatRequest, ChatResponse
-from models.exercise import ExerciseRequest, ExerciseResponse, ExerciseType, Solution
-from services.llm_service import LLMService
 from typing import Dict, List, Optional, Any, Union
 from asyncio.log import logger
 from bson import ObjectId
@@ -12,10 +10,13 @@ import json
 import re
 from datetime import datetime
 from langchain_core.messages import SystemMessage, HumanMessage
+from services.llm_service import LLMService
+from services.mongo_service import MongoDBService
+from models.exercise import Solution
 
 router = APIRouter()
 llm_service = LLMService()
-mongo_service = llm_service.mongo_services
+mongo_service = MongoDBService()
 
 # Helper function to get or create a session
 async def get_or_create_session(session_id: Optional[str] = None) -> str:
@@ -24,40 +25,43 @@ async def get_or_create_session(session_id: Optional[str] = None) -> str:
         session_id = await mongo_service.create_conversation()
     return session_id
 
-@router.post("/generate", response_model=ExerciseResponse)
+@router.post("/generate")
 async def generate_exercise(
-    request: ExerciseRequest,
+    subject: str = Body(...),
+    topic: str = Body(...),
+    exercise_type: str = Body(...),
     difficulty: str = Query("medium", enum=["easy", "medium", "hard", "expert"]),
-    number_of_questions: int = Query(3, ge=1, le=10)
-) -> ExerciseResponse:
+    number_of_questions: int = Query(3, ge=1, le=10),
+    session_id: Optional[str] = Body(None),
+    include_solutions: bool = Body(False)
+) -> Dict[str, Any]:
     """
     Generate exercises based on subject, topic and difficulty level
     """
     try:
         # Ensure we have a valid session
-        session_id = await get_or_create_session(request.session_id)
+        session_id = await get_or_create_session(session_id)
         
+        # Generate exercise using raw JSON approach
         response = await llm_service.generate_exercise(
-            subject=request.subject,
-            topic=request.topic,
-            exercise_type=request.exercise_type,
+            subject=subject,
+            topic=topic,
+            exercise_type=exercise_type,
             difficulty=difficulty,
             number_of_questions=number_of_questions,
-            session_id=session_id,
-            teacher_id=request.teacher_id
+            session_id=session_id
         )
         
         # Save the exercise with solutions to MongoDB for smart router access
         exercise_data = {
-            "exercise": response.exercise.model_dump(),
-            "solutions": response.solutions.model_dump() if response.solutions else None,
-            "subject": request.subject,
-            "topic": request.topic,
-            "exercise_type": request.exercise_type.value,
+            "exercise": response["exercise"],
+            "solutions": response["solutions"] if "solutions" in response else None,
+            "subject": subject,
+            "topic": topic,
+            "exercise_type": exercise_type,
             "difficulty": difficulty,
             "number_of_questions": number_of_questions,
             "session_id": session_id,
-            "teacher_id": request.teacher_id,
             "created_at": datetime.utcnow()
         }
         
@@ -65,23 +69,24 @@ async def generate_exercise(
         exercise_id = await mongo_service.save_exercise(exercise_data)
         exercise_id_str = str(exercise_id)
         
-        # Add exercise_id to exercise data for reference
-        if not request.include_solutions:
-            response.solutions = None
+        # Remove solutions if not requested
+        if not include_solutions and "solutions" in response:
+            del response["solutions"]
             
         # Add exercise ID to the questions for reference
-        response.exercise.questions = [
-            {**question, "exercise_id": exercise_id_str}
-            for question in response.exercise.questions
-        ]
+        for question in response["exercise"]["questions"]:
+            question["exercise_id"] = exercise_id_str
         
         # Add exercise ID to instructions for easy reference
-        response.exercise.instructions += f"\n\nExercise ID: {exercise_id_str}"
+        response["exercise"]["instructions"] += f"\n\nExercise ID: {exercise_id_str}"
         
         # Save a reference to the exercise in the conversation
-        assistant_message = f"J'ai créé un exercice pour toi sur {request.topic}. Exercise ID: {exercise_id_str}"
+        assistant_message = f"J'ai créé un exercice pour toi sur {topic}. Exercise ID: {exercise_id_str}"
         await mongo_service.save_message(session_id, "assistant", assistant_message, 
                                        metadata={"type": "exercise", "exercise_id": exercise_id_str})
+        
+        # Add the exercise ID to the response
+        response["exercise_id"] = exercise_id_str
         
         return response
     except Exception as e:
@@ -91,7 +96,7 @@ async def generate_exercise(
 @router.post("/evaluate", response_model=Dict[str, Any])
 async def evaluate_exercise(
     exercise_id: str = Body(...),
-    user_answers: List[Dict[str, Any]] = Body(...),
+    user_answers: str = Body(...),
     session_id: Optional[str] = Body(None)
 ):
     """
@@ -101,105 +106,30 @@ async def evaluate_exercise(
         # Ensure we have a valid session
         session_id = await get_or_create_session(session_id)
         
-        # Retrieve the exercise with solutions from MongoDB
-        exercise = await mongo_service.exercises.find_one({"_id": ObjectId(exercise_id)})
+        # Use the exercise manager to evaluate the exercise
+        result = await llm_service.evaluate_answer(
+            exercise_id=exercise_id,
+            user_answers=user_answers,
+            session_id=session_id
+        )
         
-        if not exercise:
-            raise HTTPException(status_code=404, detail="Exercise not found")
+        # Format the result as a friendly message for conversation history
+        response_text = f"Evaluation results:\n\n"
+        response_text += f"Score: {int(float(result['score']) * 100)}%\n\n"
+        response_text += f"{result['feedback']}\n\n"
         
-        if not exercise.get("solutions"):
-            raise HTTPException(status_code=404, detail="No solutions available for this exercise")
+        if result.get('question_feedback'):
+            response_text += "Question feedback:\n"
+            for qf in result['question_feedback']:
+                status = "✅" if qf['is_correct'] else "❌"
+                response_text += f"Q{qf['question_number']}: {status} {qf['feedback']}\n"
         
-        # Prepare for evaluation
-        system_prompt = """Vous êtes un assistant d'évaluation pédagogique.
-                
-        TÂCHE : Évaluez les réponses de l'élève par rapport aux solutions correctes d'un exercice.
-                
-        Retournez UNIQUEMENT un JSON valide avec la structure suivante :
-        {
-        "is_correct": true/false,
-        "feedback": "Retour global sur la performance",
-        "score": décimal entre 0.0 et 1.0,
-        "explanation": "Explication détaillée des réponses correctes/incorrectes",
-        "question_feedback": [
-            {
-            "question_number": 1,
-            "is_correct": true/false,
-            "feedback": "Retour pour cette question spécifique"
-            }
-        ]
-        }
-                
-        Règles :
-        - Comparez chaque réponse de l'élève à la solution correspondante
-        - Calculez un score global comme (nombre de réponses correctes / total des questions)
-        - Fournissez un retour utile et constructif
-        - Soyez indulgent avec les différences mineures d'orthographe ou les variations de formatage
-        """
-        # Convert exercise and user answers to JSON
-        exercise_json = json.dumps({
-            "exercise": exercise["exercise"],
-            "solutions": exercise["solutions"]
-        })
-        user_answers_json = json.dumps(user_answers)
+        # Save to conversation with metadata reference
+        await mongo_service.save_message(session_id, "assistant", response_text,
+                                     metadata={"type": "evaluation", "exercise_id": exercise_id, 
+                                             "evaluation_id": result.get("_id")})
         
-        user_prompt = f"""Exercise with solutions:
-        {exercise_json}
-        
-        Student answers:
-        {user_answers_json}
-        
-        Veuillez évaluer les réponses de l'étudiant et fournir des commentaires.
-        """
-        
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
-        ]
-        
-        response = await llm_service.llm.agenerate([messages])
-        response_text = response.generations[0][0].text
-        
-        # Extract JSON from response
-        json_match = re.search(r'({[\s\S]*})', response_text)
-        if json_match:
-            json_str = json_match.group(1)
-            try:
-                result = json.loads(json_str)
-                
-                # Store the evaluation result in MongoDB for reference
-                evaluation_id = await mongo_service.db.exercise_evaluations.insert_one({
-                    "exercise_id": exercise_id,
-                    "user_answers": user_answers,
-                    "evaluation": result,
-                    "session_id": session_id,
-                    "created_at": datetime.utcnow()
-                })
-                
-                # Add the evaluation ID to the result
-                result["_id"] = str(evaluation_id.inserted_id)
-                
-                # Format the result as a friendly message for conversation history
-                response_text = f"Evaluation results:\n\n"
-                response_text += f"Score: {int(float(result['score']) * 100)}%\n\n"
-                response_text += f"{result['feedback']}\n\n"
-                
-                if result.get('question_feedback'):
-                    response_text += "Question feedback:\n"
-                    for qf in result['question_feedback']:
-                        status = "✅" if qf['is_correct'] else "❌"
-                        response_text += f"Q{qf['question_number']}: {status} {qf['feedback']}\n"
-                
-                # Save to conversation with metadata reference
-                await mongo_service.save_message(session_id, "assistant", response_text,
-                                             metadata={"type": "evaluation", "exercise_id": exercise_id, 
-                                                     "evaluation_id": str(evaluation_id.inserted_id)})
-                
-                return result
-            except json.JSONDecodeError:
-                raise HTTPException(status_code=500, detail="Failed to parse evaluation data")
-        else:
-            raise HTTPException(status_code=500, detail="No valid evaluation data found in response")
+        return result
     
     except HTTPException:
         raise

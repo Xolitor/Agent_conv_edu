@@ -2,6 +2,7 @@
 Core LLM service that integrates specialized components
 Acts as the main entry point for LLM functionality
 """
+from asyncio import log
 import os
 from asyncio.log import logger
 from fastapi import HTTPException
@@ -55,15 +56,13 @@ class LLMService:
     
     async def smart_chat(self,
                         message: str,
-                        session_id: Optional[str] = None,
-                        teacher_id: Optional[str] = None) -> Dict[str, Any]:
+                        session_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Smart chat that automatically routes to the appropriate functionality
         
         Args:
             message: User's message
             session_id: Optional session ID
-            teacher_id: Optional teacher ID
             
         Returns:
             Dict containing response and metadata
@@ -73,8 +72,7 @@ class LLMService:
             await self.mongo_services.save_message(
                 session_id, 
                 "user", 
-                message,
-                metadata={"teacher_id": teacher_id if teacher_id else None}
+                message
             )
         else:
             # Create a new session if none provided
@@ -82,33 +80,17 @@ class LLMService:
             await self.mongo_services.save_message(
                 session_id,
                 "user",
-                message,
-                metadata={"teacher_id": teacher_id if teacher_id else None}
+                message
             )
         
         # Use router to determine the best handler
         result = await self.router_service.route_query(
             query=message,
-            session_id=session_id,
-            teacher_id=teacher_id
+            session_id=session_id
         )
         
-        # Save the assistant's response
-        if session_id:
-            metadata = {
-                "route": result.get("route"),
-                "teacher_id": teacher_id if teacher_id else None
-            }
-            
-            if "action" in result:
-                metadata["action"] = result["action"]
-                
-            await self.mongo_services.save_message(
-                session_id,
-                "assistant",
-                result["response"],
-                metadata=metadata
-            )
+        # The router_service now handles saving the assistant's response
+        # in each handler, so we don't need to do it here anymore
         
         # Add session_id to result for convenience
         result["session_id"] = session_id
@@ -138,7 +120,6 @@ class LLMService:
     async def generate_response(self,
                               message: str,
                               session_id: Optional[str] = None,
-                              teacher_id: Optional[str] = None,
                               use_rag: bool = False) -> str:
         """Unified response generation method"""
         # If no session_id provided, get one from the session manager
@@ -149,7 +130,6 @@ class LLMService:
         return await self.response_generator.generate_response(
             message=message,
             session_id=session_id,
-            teacher_id=teacher_id,
             use_rag=use_rag
         )
     
@@ -161,4 +141,4 @@ class LLMService:
     
     async def evaluate_answer(self, *args, **kwargs):
         """Evaluate a student's answer to an exercise"""
-        return await self.exercise_manager.evaluate_answer(*args, **kwargs)
+        return await self.exercise_manager.evaluate_exercise(*args, **kwargs)

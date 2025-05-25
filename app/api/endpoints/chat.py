@@ -22,7 +22,7 @@ mongo_service = llm_service.mongo_services
 @router.post("", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     """
-    Main chat endpoint supporting regular, teacher-specific, and RAG responses
+    Main chat endpoint supporting regular, and RAG responses
     """
     try:
         # Ensure there's a valid session ID (either provided or generated)
@@ -45,14 +45,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
         response = await llm_service.generate_response(
             message=request.message,
             session_id=session_id,
-            teacher_id=request.teacher_id,
             use_rag=request.use_rag if hasattr(request, 'use_rag') else False
         )
         
         # Save the assistant's response
         metadata = {}
-        if request.teacher_id:
-            metadata["teacher_id"] = request.teacher_id
         if hasattr(request, 'use_rag') and request.use_rag:
             metadata["use_rag"] = True
             
@@ -69,18 +66,4 @@ async def chat(request: ChatRequest) -> ChatResponse:
         return chat_response
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/summarize", response_model=ChatResponse)
-async def summarize(request: ChatRequest) -> ChatResponse:
-    """
-    Generate a summarized response using the sequencing chain
-    """
-    try:
-        response = await llm_service.generate_response_sequencing(
-            message=request.message,
-        )
-        return ChatResponse(response=response)
-    except Exception as e:
-        logger.error(f"Summarize error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

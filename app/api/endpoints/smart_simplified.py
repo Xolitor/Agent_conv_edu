@@ -28,8 +28,7 @@ async def smart_chat(request: ChatRequest) -> ChatResponse:
         # Use the smart router
         result = await llm_service.smart_chat(
             message=request.message,
-            session_id=session_id,
-            teacher_id=request.teacher_id
+            session_id=session_id
         )
         
         # Return the response
@@ -59,8 +58,7 @@ async def analyze_query(
         # Use the router service directly
         result = await llm_service.router_service.route_query(
             query=request.message,
-            session_id=request.session_id,
-            teacher_id=request.teacher_id
+            session_id=request.session_id
         )
         
         if return_full_analysis:

@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional
 
 from services.mongo_service.conversation_manager import ConversationManager
 from services.mongo_service.rag_manager import RAGManager
-from services.mongo_service.teacher_manager import TeacherManager
 from services.mongo_service.exercise_manager import ExerciseManager
 
 logging.basicConfig(level=logging.DEBUG)
@@ -40,7 +39,6 @@ class MongoDBService:
         # Initialize specialized managers
         self.conversation_manager = ConversationManager(self.db, self.conversations)
         self.rag_manager = RAGManager(self.db, self.rag_collection, self.embeddings, self.lock)
-        self.teacher_manager = TeacherManager(self.db, self.teachers)
         self.exercise_manager = ExerciseManager(self.db, self.exercises)
         
         logging.info("MongoDB service initialized")

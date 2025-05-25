@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from api.endpoints import chat, conversation, teacher, exercise, rag, smart_simplified
+from api.endpoints import chat, conversation, exercise, rag, smart_simplified
 
 router = APIRouter()
 
@@ -15,13 +15,6 @@ router.include_router(
     conversation.router, 
     prefix="/conversation", 
     tags=["Conversation"]
-)
-
-# Teacher-specific functionality
-router.include_router(
-    teacher.router, 
-    prefix="/teacher", 
-    tags=["Teacher"]
 )
 
 # Exercise functionality

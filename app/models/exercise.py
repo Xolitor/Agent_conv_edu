@@ -16,7 +16,6 @@ class ExerciseRequest(BaseModel):
     exercise_type: ExerciseType = Field(..., description="Type of exercise to generate")
     include_solutions: bool = False
     session_id: Optional[str] = None
-    teacher_id: Optional[str] = None
 
 class ExerciseContent(BaseModel):
     questions: List[Dict[str, Any]]

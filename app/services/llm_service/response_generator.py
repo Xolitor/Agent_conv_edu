@@ -58,7 +58,6 @@ class ResponseGenerator:
     async def generate_response(self,
                               message: str,
                               session_id: Optional[str] = None,
-                              teacher_id: Optional[str] = None,
                               use_rag: bool = False) -> str:
         """Unified response generation method"""
         try:
@@ -71,12 +70,7 @@ class ResponseGenerator:
             messages = []
             
             # Add appropriate system message
-            if teacher_id:
-                teacher_data = await self.mongo_service.get_teacher(teacher_id)
-                if not teacher_data:
-                    raise ValueError(f"Teacher {teacher_id} not found")
-                messages.append(SystemMessage(content=teacher_data["prompt_instructions"]))
-            elif use_rag:
+            if use_rag:
                 # Get relevant documents for RAG
                 relevant_docs = await self.mongo_service.similarity_search(message)
                 if relevant_docs:

@@ -17,7 +17,7 @@ class ChatRequest(BaseModel):
     """Requête de base pour une conversation sans contexte"""
     message: str
     session_id: Optional[str] = ""  # Ajouté pour supporter la gestion de session
-    teacher_id: Optional[str] = None  # ID de l'enseignant
+    teacher_id: Optional[str] = ""  # ID de l'enseignant
     use_rag: Optional[bool] = False  # Utiliser la RAG ou pas
     
 class ChatMessage(BaseModel):
