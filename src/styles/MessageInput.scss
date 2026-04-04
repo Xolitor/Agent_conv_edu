@@ -1,0 +1,78 @@
+.message-input {
+    background-color: #f8f9fa;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    border-top: 1px solid #ddd;
+
+    .input-field {
+        flex-grow: 1;
+        display: flex;
+        align-items: center;
+        margin-right: 10px;
+        position: relative;
+
+        input {
+            flex-grow: 1;
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            outline: none;
+            padding-right: 40px; // Permet de ne pas superposer le bouton d'upload
+
+            &:focus {
+                border-color: #007bff;
+            }
+        }
+
+        img {
+            position: absolute;
+            right: 2px;
+            transform: translateY(-50%);
+            width: 34px;
+            height: 34px;
+            cursor: pointer;
+        }
+
+        .upload-button {
+            position: absolute;
+            right: 0%;
+            height: 37px;
+            width: 37px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: $color-primary; // Couleur du thème
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            font-size: 14px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease-in-out;
+
+            &:hover {
+                background-color: $color-accent; // Teinte plus foncée au survol
+            }
+        }
+    }
+
+    .send-button {
+        background-color: #007bff;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s ease-in-out;
+
+        &:hover {
+            background-color: #0056b3;
+        }
+
+        &:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+    }
+}

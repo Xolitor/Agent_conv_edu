@@ -1,0 +1,48 @@
+.conversations-list {
+    width: 15rem; /* Correspond à w-64 */
+    border-right: 1px solid #ddd;
+    //padding: 1rem; /* Correspond à p-4 */
+    display: none; /* Cacher par défaut */
+    height: calc(100% - 300px);
+    
+    
+    @media (min-width: 768px) {
+        display: block; /* Afficher sur les écrans md et plus */
+    }
+
+    &__title {
+        font-size: 1.125rem; /* Correspond à text-lg */
+        font-weight: 600; /* Correspond à font-semibold */
+        margin-bottom: 1rem; /* Correspond à mb-4 */
+    }
+
+    &__items {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem; /* Correspond à space-y-2 */
+        overflow-y: auto; /* Activer le scroll vertical */
+        max-height: 100%; /* S'assurer que la hauteur maximale est limitée */
+        width: calc(100% - 1rem); /* Ajuster la largeur pour tenir compte du padding */
+    }
+
+    &__item {
+        width: calc(100% - 1rem);
+        text-align: left;
+        padding: 0.5rem 0.75rem; /* Correspond à px-3 py-2 */
+        border-radius: 0.5rem; /* Correspond à rounded-lg */
+        background-color: transparent;
+        transition: background-color 0.2s ease;
+        color: #ddd;
+        border: none;
+
+        &:hover {
+            background-color: $color-accent;
+            color: $color-primary;
+        }
+    }
+
+    &__item--active {
+        background-color: #e3f2fd; /* Correspond à bg-blue-100 */
+        color: #0d47a1; /* Correspond à text-blue-800 */
+    }
+}

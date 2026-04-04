@@ -1,0 +1,29 @@
+.chat-page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+
+    &__content {
+        display: flex;
+        flex: 1;
+        overflow: hidden; /* Assure que les éléments ne débordent pas */
+    }
+
+    &__chat-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+
+        .chat-window {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: $color-accent;
+        }
+
+        .message-input {
+            background-color: $color-accent;
+            border-top: 1px solid #ddd;
+        }
+    }
+}

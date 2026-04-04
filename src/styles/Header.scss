@@ -1,0 +1,83 @@
+.header {
+    background-color: $color-primary;
+    color: $color-light;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+
+    &__title {
+        font-size: 1.25rem;
+        font-weight: bold;
+        color: $color-light;
+    }
+
+    &__user-menu {
+        position: relative; /* Nécessaire pour positionner le menu dropdown */
+
+        &__user-avatar {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: $color-secondary;
+            color: white;
+            border-radius: 50%; /* Rendre le bouton circulaire */
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+
+            &:hover {
+                background-color: $color-accent;
+            }
+        }
+
+        &__dropdown {
+            position: absolute;
+            top: 45px; /* Décalage en dessous du bouton utilisateur */
+            right: 0; /* Aligner le menu sur la droite */
+            background-color: $color-light;
+            padding: 15px;
+            color: $color-secondary;
+            width: 200px;
+            border: 1px solid $color-light;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            z-index: 1000; /* Assurez-vous que le menu est au-dessus des autres éléments */
+
+            &__user-email {
+                padding-top: -10px;
+                border-bottom: 1px solid #eee;
+                font-size: 0.875rem;
+                color: #333;
+            }
+
+            &__logout-button {
+                display: block;
+                width: 100%;
+                padding: 0.5rem;
+                text-align: center;
+                background-color: $color-accent;
+                color: white;
+                border: none;
+                cursor: pointer;
+                border-radius: 5px;
+
+                &:hover {
+                    background-color: #d32f2f;
+                }
+            }
+        }
+    }
+    
+
+    &--no-user {
+        text-align: center;
+        font-size: 1rem;
+        color: #ccc;
+    }
+}
